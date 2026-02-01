@@ -16,7 +16,10 @@ namespace neon
 
         // Fallback for development/standalone on Windows
         if (!waveDir.exists())
-            waveDir = juce::File("D:\\l\\neon-synth-factory\\neon-jr\\waves-1");
+        {
+            // Use parent of current executable as relative root for development
+            waveDir = exeFile.getParentDirectory().getParentDirectory().getChildFile("neon-jr/waves-1");
+        }
         
         if (!waveDir.exists())
             waveDir = juce::File::getCurrentWorkingDirectory().getChildFile("../neon-jr/waves-1");
