@@ -13,7 +13,7 @@ param (
 
 $ErrorActionPreference = "Stop"
 
-$RootDir = "D:\l\neon-synth-factory"
+$RootDir = $PSScriptRoot
 $SynthDir = Join-Path $RootDir $Synth
 $BuildDir = Join-Path $SynthDir "build"
 $ArtifactsDir = Join-Path $RootDir "artifacts\$Synth"
@@ -53,16 +53,17 @@ if (-not $ProjectName) {
 $BinarySourceDir = Join-Path $BuildDir "$($ProjectName)_artefacts\$Config"
 
 if (Test-Path $BinarySourceDir) {
-    # Copy Standalone (.exe)
+    # Copy Standalone (.exe on Windows, .app on Mac)
     $StandaloneTargetPath = Join-Path $ArtifactsDir "Standalone"
     if (-not (Test-Path $StandaloneTargetPath)) {
         New-Item -ItemType Directory -Path $StandaloneTargetPath -Force | Out-Null
     }
 
-    Get-ChildItem -Path $BinarySourceDir -Filter "*.exe" | Copy-Item -Destination $StandaloneTargetPath -Force
+    $Ext = if ($IsWindows) { "*.exe" } else { "*.app" }
+    Get-ChildItem -Path $BinarySourceDir -Filter $Ext | Copy-Item -Destination $StandaloneTargetPath -Force -Recurse
     $StandaloneSubDir = Join-Path $BinarySourceDir "Standalone"
     if (Test-Path $StandaloneSubDir) {
-        Get-ChildItem -Path $StandaloneSubDir -Filter "*.exe" | Copy-Item -Destination $StandaloneTargetPath -Force
+        Get-ChildItem -Path $StandaloneSubDir -Filter $Ext | Copy-Item -Destination $StandaloneTargetPath -Force -Recurse
     }
     
     # Copy VST3 folder

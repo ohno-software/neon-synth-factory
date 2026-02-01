@@ -1,0 +1,58 @@
+name: Build Neon Jr.
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform: PC
+          - os: macos-latest
+            platform: Mac
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev libjack-jackd2-dev \
+            libfreetype6-dev libx11-dev libxcomposite-dev libxcursor-dev \
+            libxinerama-dev libxrandr-dev libmesa-dev libglu1-mesa-dev \
+            freeglut3-dev libwebkit2gtk-4.0-dev libcurl4-openssl-dev
+
+      - name: Fetch JUCE
+        run: |
+          git clone --depth 1 https://github.com/juce-framework/JUCE.git JUCE
+
+      - name: Setup CMake and Ninja
+        uses: lukka/get-cmake@latest
+
+      - name: Build Neon Jr
+        shell: pwsh
+        run: |
+          ./build.ps1 -Synth neon-jr -Config Release
+
+      - name: Prepare Artifacts
+        shell: pwsh
+        run: |
+          mkdir out
+          cp -r artifacts/neon-jr/* out/
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Neon-Jr-${{ matrix.platform }}
+          path: out/
