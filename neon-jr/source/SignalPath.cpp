@@ -6,6 +6,15 @@
 
 namespace neon
 {
+    // Fast rational approximation for tanh (CPU Mitigation)
+    inline float fastTanh (float x)
+    {
+        if (x < -3.0f) return -1.0f;
+        if (x > 3.0f) return 1.0f;
+        float x2 = x * x;
+        return x * (27.0f + x2) / (27.0f + 9.0f * x2);
+    }
+
     SignalPath::SignalPath() : registry (ParameterRegistry::getInstance())
     {
         formatManager.registerBasicFormats();
@@ -459,7 +468,7 @@ namespace neon
 
         // Apply Drive
         if (state.drive > 0.01f)
-            val = std::tanh (val * (1.0f + state.drive * 4.0f));
+            val = fastTanh (val * (1.0f + state.drive * 4.0f));
 
         // BitRedux
         if (state.bitRedux > 0.05f)
@@ -476,7 +485,8 @@ namespace neon
             else if (val < -1.0f) val = -1.0f - (val + 1.0f);
         }
 
-        phase = (float)std::fmod ((double)phase + phaseInc, 1.0);
+        phase += (float)phaseInc;
+        if (phase >= 1.0f) phase -= 1.0f;
         if (std::isnan(phase)) phase = 0.0f;
 
         return val * state.volume;
@@ -536,8 +546,12 @@ namespace neon
                 break;
         }
 
-        state.phase = (float)std::fmod (phase + phaseInc, 1.0);
-        if (state.phase < phase) state.sampleHoldTriggered = false; // Reset trigger on wrap
+        state.phase += (float)phaseInc;
+        if (state.phase >= 1.0f) 
+        {
+            state.phase -= 1.0f;
+            state.sampleHoldTriggered = false; // Reset trigger on wrap
+        }
         
         return out;
     }
@@ -781,8 +795,8 @@ namespace neon
                 // Intermediate non-linear stage (Aggressive!)
                 if (baseFilterDrive > 1.1f)
                 {
-                    sampL = std::tanh (sampL);
-                    sampR = std::tanh (sampR);
+                    sampL = fastTanh (sampL);
+                    sampR = fastTanh (sampR);
                 }
 
                 if (filterIs24dB)
@@ -792,8 +806,8 @@ namespace neon
 
                     if (baseFilterDrive > 1.1f)
                     {
-                        sampL = std::tanh (sampL);
-                        sampR = std::tanh (sampR);
+                        sampL = fastTanh (sampL);
+                        sampR = fastTanh (sampR);
                     }
                 }
 
