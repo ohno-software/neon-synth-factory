@@ -25,8 +25,7 @@ namespace neon
         LookAndFeel lookAndFeel;
         
         NeonDebugPanel debugPanel;
-        ModuleSelectionPanel topSelectionPanel;
-        ModuleSelectionPanel bottomSelectionPanel;
+        ModuleSelectionPanel selectionPanel;
         juce::OwnedArray<ModuleBase> modules;
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (NeonJrAudioProcessorEditor)
