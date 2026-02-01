@@ -17,7 +17,7 @@ add_subdirectory(${COMPONENTS_DIR} ${CMAKE_CURRENT_BINARY_DIR}/neon-components)
 
 # Create the Plugin
 juce_add_plugin(NeonJr
-    PRODUCT_NAME "Neon Jr."
+    PRODUCT_NAME "Neon Jr"
     COMPANY_NAME "Neon Audio"
     BUNDLE_ID com.neonaudio.neonjr
     PLUGIN_MANUFACTURER_CODE NeAu
@@ -30,7 +30,7 @@ juce_add_plugin(NeonJr
     EDITOR_RESIZABLE TRUE
     FORMATS VST3 Standalone
     STANDALONE_MENU_BAR TRUE
-    PRODUCT_NAME "Neon Jr."
+    PRODUCT_NAME "Neon Jr"
 )
 
 target_sources(NeonJr

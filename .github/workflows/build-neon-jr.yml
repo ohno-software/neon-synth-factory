@@ -49,18 +49,17 @@ jobs:
           # Windows: Move standalone into its own folder with waves
           if ("${{ runner.os }}" -eq "Windows") {
               mkdir dist-pc
-              cp "artifacts/neon-jr/Standalone/Neon Jr.exe" dist-pc/
+              cp "artifacts/neon-jr/Standalone/*.exe" dist-pc/
               cp -r artifacts/neon-jr/waves-1 dist-pc/
               cp -r artifacts/neon-jr/VST3 dist-pc/
               Compress-Archive -Path dist-pc/* -DestinationPath "Neon-Jr-PC.zip"
           }
-          # Mac: Move .app and waves (though app usually bundles, we keep it simple)
+          # Mac: Move .app and waves
           else {
               mkdir dist-mac
-              cp -r "artifacts/neon-jr/Standalone/Neon Jr.app" dist-mac/
+              cp -r "artifacts/neon-jr/Standalone/*.app" dist-mac/
               cp -r artifacts/neon-jr/waves-1 dist-mac/
               cp -r artifacts/neon-jr/VST3 dist-mac/
-              # On Mac we just upload the folder, Actions zips it
           }
 
       - name: Upload Artifacts
