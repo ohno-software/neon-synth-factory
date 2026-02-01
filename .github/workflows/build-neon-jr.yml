@@ -3,6 +3,8 @@ name: Build Neon Jr.
 on:
   push:
     branches: [ main ]
+    tags:
+      - 'v*'
   pull_request:
     branches: [ main ]
   workflow_dispatch:
@@ -24,15 +26,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install dependencies (Linux)
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libasound2-dev libjack-jackd2-dev \
-            libfreetype6-dev libx11-dev libxcomposite-dev libxcursor-dev \
-            libxinerama-dev libxrandr-dev libmesa-dev libglu1-mesa-dev \
-            freeglut3-dev libwebkit2gtk-4.0-dev libcurl4-openssl-dev
-
       - name: Fetch JUCE
         run: |
           git clone --depth 1 https://github.com/juce-framework/JUCE.git JUCE
@@ -53,10 +46,49 @@ jobs:
         shell: pwsh
         run: |
           mkdir out
-          cp -r artifacts/neon-jr/* out/
+          # Windows: Move standalone into its own folder with waves
+          if ("${{ runner.os }}" -eq "Windows") {
+              mkdir dist-pc
+              cp "artifacts/neon-jr/Standalone/Neon Jr.exe" dist-pc/
+              cp -r artifacts/neon-jr/waves-1 dist-pc/
+              cp -r artifacts/neon-jr/VST3 dist-pc/
+              Compress-Archive -Path dist-pc/* -DestinationPath "Neon-Jr-PC.zip"
+          }
+          # Mac: Move .app and waves (though app usually bundles, we keep it simple)
+          else {
+              mkdir dist-mac
+              cp -r "artifacts/neon-jr/Standalone/Neon Jr.app" dist-mac/
+              cp -r artifacts/neon-jr/waves-1 dist-mac/
+              cp -r artifacts/neon-jr/VST3 dist-mac/
+              # On Mac we just upload the folder, Actions zips it
+          }
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: Neon-Jr-${{ matrix.platform }}
-          path: out/
+          path: |
+            Neon-Jr-PC.zip
+            dist-mac/
+
+  release:
+    name: Create Alpha Release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            Neon-Jr-PC/Neon-Jr-PC.zip
+            Neon-Jr-Mac/**/*
+          draft: false
+          prerelease: true
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+

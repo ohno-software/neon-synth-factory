@@ -1,6 +1,6 @@
 param (
     [Parameter(Mandatory=$true)]
-    [ValidateSet("neon-jr", "neon-qwen", "neon-test")]
+    [ValidateSet("neon-jr")]
     [string]$Synth,
 
     [Parameter(Mandatory=$false)]
@@ -70,6 +70,17 @@ if (Test-Path $BinarySourceDir) {
     $Vst3Path = Join-Path $BinarySourceDir "VST3"
     if (Test-Path $Vst3Path) {
         Copy-Item -Path $Vst3Path -Destination $ArtifactsDir -Recurse -Force
+    }
+
+    # Copy Wavetables for distribution
+    $WavesSrc = Join-Path $SynthDir "waves-1"
+    if (Test-Path $WavesSrc) {
+        Write-Host "Copying wavetables..."
+        $WavesDest = Join-Path $ArtifactsDir "waves-1"
+        if (-not (Test-Path $WavesDest)) {
+            New-Item -ItemType Directory -Path $WavesDest -Force | Out-Null
+        }
+        Copy-Item -Path $WavesSrc -Destination $ArtifactsDir -Recurse -Force
     }
     
     Write-Host "Success! Artifacts available in: $ArtifactsDir" -ForegroundColor Green

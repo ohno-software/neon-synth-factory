@@ -7,7 +7,6 @@ The factory serves as a laboratory where multiple "Neon" synthesizer variations 
 
 ## Core Projects
 *   **[neon-jr](../neon-jr)**: The core reference synth. Stable, reliable, and the blueprint for the factory standards.
-*   **[neon-qwen](../neon-qwen)**: A modern synth prototype demonstrating the factory's sparse-folder build capability.
 *   **[neon-components](../neon-components)**: The central library of UI elements and themes shared across all factory synths.
 
 ## Ecosystem Overview

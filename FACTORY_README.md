@@ -10,7 +10,6 @@ To build the factory default synth (`neon-jr`):
 
 ## Factory Modules
 *   **[neon-jr](neon-jr)**: The reference monophonic/polyphonic synth.
-*   **[neon-qwen](neon-qwen)**: Experimental DSP and oscillator prototype.
 *   **[neon-components](neon-components)**: Shared UI components and thematic assets.
 *   **[artifacts](artifacts)**: The centralized showroom for compiled binaries.
 
