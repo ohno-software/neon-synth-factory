@@ -1,0 +1,10 @@
+#include "neon_ui_components.h"
+
+#include "core/NeonLookAndFeel.cpp"
+#include "core/NeonParameterRegistry.cpp"
+#include "widgets/NeonBar.cpp"
+#include "widgets/NeonToggle.cpp"
+#include "widgets/NeonParameterCard.cpp"
+#include "modules/ModuleBase.cpp"
+#include "modules/NeonSynthModule.cpp"
+#include "modules/NeonSelectionPanel.cpp"

@@ -1,0 +1,24 @@
+# Neon H2O - Classic Neon Theme
+# A high-contrast cyber-retro palette
+
+[metadata]
+name = "Classic Neon"
+author = "Neon Factory"
+description = "The baseline 80s Cyberpunk aesthetic"
+
+[global]
+background      = "#1A1A1A" # Primary dark background
+card_background = "#2A2A2A" # Dark gray for module cards
+bar_background  = "#404040" # Background for parameter bars
+text_bright     = "#FFFFFF" # Active labels
+text_dim        = "#CCCCCC" # 7-segment display and inactive text
+
+[accents]
+oscillator      = "#00AAFF" # Neon Cyan
+mutator         = "#00AAFF" # Same as Osc
+filter          = "#00FFAA" # Neon Teal
+envelope        = "#00FF00" # Bright Green
+amplifier       = "#FF4D00" # Volcanic Orange
+modulation      = "#FFAA00" # Amber
+effects         = "#0088FF" # Sky Blue
+indicator       = "#FFFFFF" # White circles/bars

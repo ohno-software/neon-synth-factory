@@ -1,0 +1,23 @@
+# Build artifacts
+**/build/
+artifacts/
+bin/
+obj/
+*.user
+*.suo
+*.sln
+*.vcxproj
+*.filters
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# JUCE/IDE related
+JUCE/
+JUCE-tutorials/
+# If JUCE is meant to be included, comment out above. 
+# But usually JUCE is a submodule or external.
+# Given the "factory" name, maybe they WANT the whole thing?
+# Let's check if the user has specific instructions about JUCE.
+# For now, I'll ignore artifacts and build dirs at least.

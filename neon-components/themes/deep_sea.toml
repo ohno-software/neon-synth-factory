@@ -1,0 +1,24 @@
+# Neon H2O - Deep Sea Theme
+# A moodier, oceanic variant
+
+[metadata]
+name = "Deep Sea"
+author = "Neon Factory"
+description = "Dark blues and purples for night sessions"
+
+[global]
+background      = "#0D1117"
+card_background = "#161B22"
+bar_background  = "#21262D"
+text_bright     = "#F0F6FC"
+text_dim        = "#8B949E"
+
+[accents]
+oscillator      = "#58A6FF" # Blue
+mutator         = "#58A6FF"
+filter          = "#44D0BB" # Seafoam
+envelope        = "#7EE787" # Light Green
+amplifier       = "#FF7B72" # Salmon / Deep Coral
+modulation      = "#D29922" # Dark Gold
+effects         = "#BC8CFF" # Purple
+indicator       = "#F0F6FC"
