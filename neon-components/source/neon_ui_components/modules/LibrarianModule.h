@@ -15,7 +15,7 @@ namespace neon
             patchNameEditor.setJustification (juce::Justification::centred);
             patchNameEditor.setFont (juce::FontOptions ().withHeight (30.0f).withStyle ("Bold"));
             patchNameEditor.setColour (juce::TextEditor::backgroundColourId, juce::Colours::black.withAlpha (0.3f));
-            patchNameEditor.setColour (juce::TextEditor::textColourId, accentColor);
+            patchNameEditor.setColour (juce::TextEditor::textColourId, juce::Colours::white);
             patchNameEditor.setText (NeonRegistry::getCurrentPatchName());
             patchNameEditor.onReturnKey = [this] { performSave (false); };
             addAndMakeVisible (patchNameEditor);

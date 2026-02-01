@@ -16,8 +16,7 @@ namespace neon
 
         auto theme = NeonRegistry::getTheme();
 
-        addAndMakeVisible (topSelectionPanel);
-        addAndMakeVisible (bottomSelectionPanel);
+        addAndMakeVisible (selectionPanel);
         
         // Modules
         auto osc1 = std::make_unique<OscillatorModule> ("Oscillator 1", theme.oscillator);
@@ -85,21 +84,12 @@ namespace neon
         modules.add (std::move (ctrlModule));
         modules.add (std::move (libModule));
 
-        topSelectionPanel.setModuleNames ({
-            "OSC 1", "OSC 2", "FILTER", "AMP", "P-ENV", "F-ENV", "M-ENV", "A-ENV"
-        });
-
-        bottomSelectionPanel.setModuleNames ({
-            "LFO 1", "LFO 2", "LFO 3", "ARP", "MOD", "FX", "CTRL", "LIB"
-        });
-
         for (auto* m : modules)
             addChildComponent (m);
 
-        topSelectionPanel.onModuleChanged = [this] (int index) { setActiveModule (index); };
-        bottomSelectionPanel.onModuleChanged = [this] (int index) { setActiveModule (index + 8); };
+        selectionPanel.onModuleChanged = [this] (int index) { setActiveModule (index); };
 
-        setActiveModule (0);
+        setActiveModule (15); // Default to LIB
         setSize (940, 840);
         startTimerHz (30);
     }
@@ -135,17 +125,7 @@ namespace neon
         for (int i = 0; i < modules.size(); ++i)
             modules[i]->setVisible (i == index);
         
-        // Synchronize selection between the two panels
-        if (index < 8)
-        {
-            topSelectionPanel.selectIndex (index, false);
-            bottomSelectionPanel.selectIndex (-1, false);
-        }
-        else
-        {
-            topSelectionPanel.selectIndex (-1, false);
-            bottomSelectionPanel.selectIndex (index - 8, false);
-        }
+        selectionPanel.selectModuleByIndex (index, false);
         
         resized();
     }
@@ -159,24 +139,31 @@ namespace neon
     {
         auto bounds = getLocalBounds();
         
-        // Main Synth Area (940px wide)
-        auto synthArea = bounds;
+        // Layout in 1/10ths:
+        // 1/10 - Top Navigation (category buttons)
+        // 5/10 - Module Display (1/2 of synth)
+        // 1/10 - Parameters Row 1
+        // 1/10 - Parameters Row 2
+        // 1/10 - Parameter Navigation
+        // 1/10 - Bottom Navigation (module buttons)
         
-        // 1/12 units for the vertical layout
-        float unitH = (float)synthArea.getHeight() / 12.0f;
+        float unitH = (float)bounds.getHeight() / 10.0f;
         
-        // Top 1/12: Top Buttons
-        topSelectionPanel.setBounds (synthArea.removeFromTop ((int)unitH));
+        // Top 1/10: Category navigation
+        auto topNav = bounds.removeFromTop ((int)unitH);
         
-        // Bottom 1/12: Bottom Buttons
-        bottomSelectionPanel.setBounds (synthArea.removeFromBottom ((int)unitH));
+        // Bottom 1/10: Module navigation  
+        auto bottomNav = bounds.removeFromBottom ((int)unitH);
         
-        // The remaining 10/12 is for the active module
+        // Selection panel gets full height of window, positioned to place rows correctly
+        selectionPanel.setBounds (0, 0, getWidth(), getHeight());
+        
+        // The remaining 8/10 is for the active module (5/10 display + 3/10 parameters)
         for (auto* m : modules)
         {
             if (m->isVisible())
             {
-                m->setBounds (synthArea);
+                m->setBounds (bounds);
             }
         }
     }
