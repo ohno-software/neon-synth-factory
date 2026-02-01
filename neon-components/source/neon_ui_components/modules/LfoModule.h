@@ -17,7 +17,7 @@ namespace neon
             addParameter ("Sync", 0.0f, 1.0f, 0.0f, true); // Hz / Note
             if (auto* p = parameters.back()) p->setBinaryLabels ("HZ", "NOTE");
 
-            addParameter ("Rate Hz", 0.0f, 1000.0f, 1.0f);
+            addParameter ("Rate Hz", 0.2f, 20.0f, 1.0f); // 0.2-20 Hz with default skew
             
             std::vector<juce::String> divisions = { 
                 "1/64", "1/32", "1/16", "1/8", "1/4", "1/2", "1/1", "2/1", "4/1" 
@@ -29,10 +29,10 @@ namespace neon
 
             addParameter ("Phase", 0.0f, 360.0f, 0.0f, false, 0.0f, false, true);
             addParameter ("Delay", 0.0f, 5000.0f, 0.0f, false, 0.0f, false, true); // Delay in ms
+            addParameter ("Fade", 0.0f, 5000.0f, 0.0f, false, 0.0f, false, true);  // NEW: Fade-in time in ms
 
             // Page 2: Modulation Targets (All 4 on one page)
-            // To ensure they are together, we add 1 spacer (7 used already)
-            addSpacer();
+            // To ensure they are together, we add 0 spacers (8 used already - perfect fit)
 
             // Targets
             std::vector<juce::String> targets = getModTargetNames();

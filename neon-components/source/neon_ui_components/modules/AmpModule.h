@@ -10,10 +10,17 @@ namespace neon
         AmpModule (const juce::String& name, const juce::Colour& color) 
             : ModuleBase (name, color)
         {
+            // Row 1: Level, Velocity, Aftertouch, [Blank]
             addParameter ("Level",  0.0f, 1.0f, 0.8f);
-            addParameter ("Pan",    -1.0f, 1.0f, 0.0f);
-            addParameter ("Spread", 0.0f, 1.0f, 0.0f);
             addParameter ("Velocity", 0.0f, 1.0f, 0.5f);
+            addParameter ("Aftertouch", 0.0f, 1.0f, 0.0f); // NEW: Amp aftertouch sensitivity
+            addSpacer(); // Blank
+            
+            // Row 2: [All Blank]
+            addSpacer();
+            addSpacer();
+            addSpacer();
+            addSpacer();
             
             lastAdjustedIndex = 0;
         }
@@ -23,9 +30,8 @@ namespace neon
         {
             auto r = area.reduced (150, 100).toFloat();
             float level = parameters[0]->getValue();
-            float pan = parameters[1]->getValue();
 
-            // VU Meter Style visualization
+            // VU Meter Style visualization (simplified without pan)
             g.setColour (accentColor.withAlpha (0.1f));
             g.fillRect (r);
             
@@ -33,8 +39,9 @@ namespace neon
             auto leftMeter = r.withWidth (meterW).withX (r.getCentreX() - meterW - 10);
             auto rightMeter = r.withWidth (meterW).withX (r.getCentreX() + 10);
 
-            float L = level * juce::jmap (pan, 1.0f, -1.0f, 0.0f, 1.0f);
-            float R = level * juce::jmap (pan, -1.0f, 1.0f, 0.0f, 1.0f);
+            // Equal level for both channels
+            float L = level;
+            float R = level;
 
             g.setColour (accentColor);
             g.fillRect (leftMeter.withHeight (leftMeter.getHeight() * L).withY (leftMeter.getBottom() - leftMeter.getHeight() * L));

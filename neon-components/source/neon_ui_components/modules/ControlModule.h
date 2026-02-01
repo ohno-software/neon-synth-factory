@@ -14,12 +14,20 @@ namespace neon
         ControlModule (const juce::String& name, const juce::Colour& color) 
             : ModuleBase (name, color)
         {
+            // Row 1: PB Range, Mode, Tempo, Tempo Sync
             addParameter ("PB Range", 0.0f, 24.0f, 2.0f, false, 1.0f);
             addChoiceParameter ("Mode", {"POLY", "MONO"}, 0);
-            
             addParameter ("Tempo", 20.0f, 300.0f, 120.0f, false, 0.0f, false, true);
             addParameter ("Tempo Sync", 0.0f, 1.0f, 1.0f, true);
             if (auto* p = parameters.back()) p->setBinaryLabels ("SELF", "HOST");
+
+            // Row 2: Porta On, Porta Time, Porta Time/Rate, [Blank]
+            addParameter ("Porta On", 0.0f, 1.0f, 0.0f, true); // NEW: Portamento on/off
+            if (auto* p = parameters.back()) p->setBinaryLabels ("OFF", "ON");
+            addParameter ("Porta Time", 0.0f, 5000.0f, 100.0f); // NEW: Portamento time in ms
+            addParameter ("Porta Mode", 0.0f, 1.0f, 0.0f, true); // NEW: Time vs Rate mode
+            if (auto* p = parameters.back()) p->setBinaryLabels ("TIME", "RATE");
+            addSpacer(); // Blank
 
             moduleNameDisplay.setText("GLOBAL CONTROLS", juce::dontSendNotification);
         }

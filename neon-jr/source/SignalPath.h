@@ -26,14 +26,14 @@ namespace neon
 
         void noteOn (int midiNote, float velocity);
         void noteOff (int midiNote);
+        void setPolyAftertouch (int midiNote, float value);
+        void setChannelAftertouch (float value);
         void setPitchWheel (float value) { pitchWheel = value; }
         void setModWheel (float value) { modWheel = value; }
-        void setAftertouch (float value) { aftertouch = value; }
         void setBpm (double newBpm) { bpm = newBpm; }
 
         float getPitchWheel() const { return pitchWheel; }
         float getModWheel() const { return modWheel; }
-        float getAftertouch() const { return aftertouch; }
         
         int getActiveVoicesCount() const 
         {
@@ -72,6 +72,7 @@ namespace neon
             bool keySync = true;
             float phaseStart = 0.0f;
             float delayMs = 0.0f;
+            float fadeMs = 0.0f; // NEW: Fade-in time
             
             struct ModSlot { float target = 0.0f; float amount = 0.0f; };
             ModSlot slots[4];
@@ -96,8 +97,13 @@ namespace neon
         {
             int midiNote = -1;
             float velocity = 0.0f;
+            float aftertouch = 0.0f; // Poly aftertouch per voice
             std::atomic<bool> isActive { false };
             double noteOnTime = 0.0; // For voice stealing
+            
+            // Portamento/glide state
+            float targetFrequency = 440.0f;
+            float currentGlideFreq = 440.0f;
 
             OscState osc1, osc2;
             std::array<LfoState, 3> lfos;
@@ -169,16 +175,19 @@ namespace neon
             int modType = 0; // 0=Off, 1=Chorus, 2=Phaser, 3=Flanger
             float modRate = 1.0f;
             float modDepth = 0.5f;
+            float modFeedback = 0.0f; // NEW: Modulation FX feedback
             float modMix = 0.0f;
 
             float dlyTime = 400.0f;
+            int dlyNoteIdx = 4; // NEW: Delay note division index
             float dlyFeedback = 0.3f;
             float dlyMix = 0.0f;
             bool dlySync = false;
 
+            float rvbTime = 2.0f; // NEW: Reverb decay time
             float rvbSize = 0.5f;
             float rvbDamp = 0.5f;
-            float rvbWidth = 0.5f;
+            float rvbPredelay = 0.0f; // NEW: Reverb predelay in ms
             float rvbMix = 0.0f;
         };
 
@@ -199,6 +208,7 @@ namespace neon
         ArpState arpState;
         FxSettings fxSettings;
         bool isMonoMode = false;
+        std::vector<int> monoHeldNotes;
 
         // DSP FX
         juce::dsp::Chorus<float> chorus;
@@ -216,7 +226,6 @@ namespace neon
         } delay;
         
         juce::AudioFormatManager formatManager;
-        juce::Array<juce::File> waveformFiles;
         std::vector<juce::AudioBuffer<float>> wavetables;
         
         // Polyphony
@@ -232,15 +241,35 @@ namespace neon
         float baseFilterDrive = 1.0f;
         float filterKeyTrack = 0.5f;
         bool filterIs24dB = true;
+        float filterVelocity = 0.0f; // NEW: Filter velocity sensitivity
+        float filterAftertouch = 0.0f; // NEW: Filter aftertouch sensitivity
         
         float filterEnvAmount = 0.0f;
+        int filterEnvTarget = 2; // NEW: 0=Osc1, 1=Osc2, 2=Both (for future use)
+        float filterEnvVelocity = 0.0f; // NEW: F-Env velocity sensitivity for amount
+        float filterEnvAftertouch = 0.0f; // NEW: F-Env aftertouch sensitivity for amount
+        float filterEnvVelAttack = 0.0f; // NEW: F-Env velocity sensitivity for attack
+        
         float pitchEnvAmount = 0.0f;
+        int pitchEnvTarget = 2; // NEW: 0=Osc1, 1=Osc2, 2=Both
+        float pitchEnvVelocity = 0.0f; // NEW: P-Env velocity sensitivity for amount
+        float pitchEnvAftertouch = 0.0f; // NEW: P-Env aftertouch sensitivity for amount
+        float pitchEnvVelAttack = 0.0f; // NEW: P-Env velocity sensitivity for attack
+        
         float ampLevel = 0.8f;
+        float ampVelocity = 0.5f; // Exists in Amp Output
+        float ampAftertouch = 0.0f; // NEW: Amp aftertouch sensitivity
 
         float pitchWheel = 0.0f;  // -1.0 to 1.0
         float modWheel = 0.0f;    // 0.0 to 1.0
-        float aftertouch = 0.0f;  // 0.0 to 1.0
         float pbRange = 2.0f;     // Pitch bend range in semitones
+        
+        // NEW: Portamento
+        bool portaOn = false;
+        float portaTime = 100.0f; // ms
+        bool portaMode = false; // false=time, true=rate
+        float currentPortaFreq = 440.0f;
+        int lastMonoNote = -1;
         
         float ampEnvMode = 0.0f;
         float filterEnvMode = 0.0f;
@@ -258,11 +287,10 @@ namespace neon
 
         struct CtrlSlot
         {
-            float source = 0.0f;
             float target = 0.0f;
             float amount = 0.0f;
         };
-        std::array<CtrlSlot, 8> ctrlSlots;
+        std::array<CtrlSlot, 16> ctrlSlots; // Expanded from 8 to 16, source removed (uses Mod Env)
         
         ParameterRegistry& registry;
         juce::AudioBuffer<float> tempBuffer;

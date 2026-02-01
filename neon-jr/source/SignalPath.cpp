@@ -1,5 +1,6 @@
 #include "SignalPath.h"
 #include "ModulationTargets.h"
+#include "BinaryData.h"
 #include <cmath>
 #include <algorithm>
 #include <random>
@@ -18,24 +19,6 @@ namespace neon
     SignalPath::SignalPath() : registry (ParameterRegistry::getInstance())
     {
         formatManager.registerBasicFormats();
-        
-        // Try to find the waves-1 directory relative to the binary or in known locations
-        juce::File exeFile = juce::File::getSpecialLocation(juce::File::currentExecutableFile);
-        juce::File waveDir = exeFile.getParentDirectory().getChildFile("waves-1");
-
-        // Fallback for development/standalone on Windows
-        if (!waveDir.exists())
-        {
-            // Use parent of current executable as relative root for development
-            waveDir = exeFile.getParentDirectory().getParentDirectory().getChildFile("neon-jr/waves-1");
-        }
-        
-        if (!waveDir.exists())
-            waveDir = juce::File::getCurrentWorkingDirectory().getChildFile("../neon-jr/waves-1");
-            
-        waveformFiles = waveDir.findChildFiles (juce::File::findFiles, false, "*.wav");
-        
-        // Initial setup of master wavetables
         updateWavetables();
     }
 
@@ -44,15 +27,28 @@ namespace neon
         wavetables.clear();
         std::vector<juce::String> names;
         
-        for (auto& file : waveformFiles)
+        // Load waveforms from embedded BinaryData
+        for (int i = 0; i < BinaryData::namedResourceListSize; ++i)
         {
-            std::unique_ptr<juce::AudioFormatReader> reader (formatManager.createReaderFor (file));
-            if (reader != nullptr)
+            juce::String resourceName = BinaryData::originalFilenames[i];
+            if (resourceName.endsWithIgnoreCase (".wav"))
             {
-                juce::AudioBuffer<float> buffer (1, (int)reader->lengthInSamples);
-                reader->read (&buffer, 0, (int)reader->lengthInSamples, 0, true, true);
-                wavetables.push_back (std::move (buffer));
-                names.push_back (file.getFileNameWithoutExtension());
+                int dataSize = 0;
+                const char* data = BinaryData::getNamedResource (BinaryData::namedResourceList[i], dataSize);
+                
+                if (data != nullptr && dataSize > 0)
+                {
+                    auto stream = std::make_unique<juce::MemoryInputStream> (data, (size_t)dataSize, false);
+                    std::unique_ptr<juce::AudioFormatReader> reader (formatManager.createReaderFor (std::move(stream)));
+                    
+                    if (reader != nullptr)
+                    {
+                        juce::AudioBuffer<float> buffer (1, (int)reader->lengthInSamples);
+                        reader->read (&buffer, 0, (int)reader->lengthInSamples, 0, true, true);
+                        wavetables.push_back (std::move (buffer));
+                        names.push_back (resourceName.upToLastOccurrenceOf (".", false, false));
+                    }
+                }
             }
         }
         
@@ -126,9 +122,12 @@ namespace neon
                 return;
         }
 
-        // Mono Mode: Kill other voices
+        // Mono Mode: Kill other voices and track held notes
         if (isMonoMode)
         {
+            // Add to held notes list
+            monoHeldNotes.push_back (midiNote);
+            
             for (auto& v : voices)
             {
                 if (v.isActive)
@@ -173,6 +172,22 @@ namespace neon
             voiceToUse->decimationCounter = juce::Random::getSystemRandom().nextInt (8);
 
             float freq = (float)juce::MidiMessage::getMidiNoteInHertz (midiNote);
+            voiceToUse->targetFrequency = freq;
+            
+            // Portamento: if enabled and we have a previous note, start glide from that frequency
+            if (portaOn && lastMonoNote >= 0 && lastMonoNote != midiNote)
+            {
+                voiceToUse->currentGlideFreq = currentPortaFreq;
+            }
+            else
+            {
+                voiceToUse->currentGlideFreq = freq;
+            }
+            
+            // Update global portamento state
+            currentPortaFreq = freq;
+            lastMonoNote = midiNote;
+            
             voiceToUse->osc1.currentFrequency = freq;
             if (globalOsc1.keySync) {
                 for (int i = 0; i < 8; ++i) voiceToUse->osc1.phases[i] = globalOsc1.phaseStart;
@@ -208,6 +223,24 @@ namespace neon
         }
     }
 
+    void SignalPath::setPolyAftertouch (int midiNote, float value)
+    {
+        for (auto& v : voices)
+        {
+            if (v.isActive && v.midiNote == midiNote)
+                v.aftertouch = value;
+        }
+    }
+
+    void SignalPath::setChannelAftertouch (float value)
+    {
+        for (auto& v : voices)
+        {
+            if (v.isActive)
+                v.aftertouch = value;
+        }
+    }
+
     void SignalPath::noteOff (int midiNote)
     {
         if (arpSettings.enabled)
@@ -235,10 +268,14 @@ namespace neon
             }
         }
         
-        // If Mono, play previous held note if it exists
-        if (isMonoMode && !arpState.heldNotes.empty())
+        // If Mono, remove from held notes and retrigger previous note if any remain
+        if (isMonoMode)
         {
-            noteOn (arpState.heldNotes.back(), 0.8f);
+            monoHeldNotes.erase (std::remove (monoHeldNotes.begin(), monoHeldNotes.end(), midiNote), monoHeldNotes.end());
+            if (!monoHeldNotes.empty())
+            {
+                noteOn (monoHeldNotes.back(), 0.8f);
+            }
         }
     }
 
@@ -273,11 +310,12 @@ namespace neon
         auto updateGlobalLfo = [&](LfoSettings& settings, const juce::String& name) {
             settings.shape = (int)std::round (getVal (name + "/Shape", 0.0f));
             settings.syncMode = getVal (name + "/Sync", 0.0f) > 0.5f;
-            settings.rateHz = getVal (name + "/Rate Hz", 1.0f);
+            settings.rateHz = getVal (name + "/Rate Hz", 1.0f) * 5.0f; // Compensate for skew
             settings.rateNoteIdx = (int)std::round (getVal (name + "/Rate Note", 4.0f));
             settings.keySync = getVal (name + "/KeySync", 1.0f) > 0.5f;
             settings.phaseStart = getVal (name + "/Phase", 0.0f) / 360.0f;
             settings.delayMs = getVal (name + "/Delay", 0.0f);
+            settings.fadeMs = getVal (name + "/Fade", 0.0f); // NEW
             
             for (int i = 0; i < 4; ++i)
             {
@@ -297,6 +335,8 @@ namespace neon
         baseFilterDrive = getVal ("Ladder Filter/Drive", 1.0f);
         filterKeyTrack = getVal ("Ladder Filter/KeyTrack", 0.5f);
         filterIs24dB = getVal ("Ladder Filter/Slope", 1.0f) > 0.5f;
+        filterVelocity = getVal ("Ladder Filter/Velocity", 0.0f); // NEW
+        filterAftertouch = getVal ("Ladder Filter/Aftertouch", 0.0f); // NEW
 
         // Env - Update ADSR from DAHDSR params
         auto getEnvParams = [&] (const juce::String& mod) {
@@ -314,7 +354,16 @@ namespace neon
         modParams = getEnvParams ("Mod Env");
 
         filterEnvAmount = getVal ("Filter Env/Amount", 0.0f);
+        filterEnvTarget = (int)getVal ("Filter Env/Target", 2.0f); // NEW
+        filterEnvVelocity = getVal ("Filter Env/V.Amount", 0.0f); // NEW
+        filterEnvAftertouch = getVal ("Filter Env/AT.Amount", 0.0f); // NEW
+        filterEnvVelAttack = getVal ("Filter Env/V.Attack", 0.0f); // NEW
+        
         pitchEnvAmount = getVal ("Pitch Env/Amount", 0.0f);
+        pitchEnvTarget = (int)getVal ("Pitch Env/Target", 2.0f); // NEW
+        pitchEnvVelocity = getVal ("Pitch Env/V.Amount", 0.0f); // NEW
+        pitchEnvAftertouch = getVal ("Pitch Env/AT.Amount", 0.0f); // NEW
+        pitchEnvVelAttack = getVal ("Pitch Env/V.Attack", 0.0f); // NEW
         
         for (int i = 0; i < 4; ++i)
         {
@@ -323,12 +372,12 @@ namespace neon
             modSlots[i].amount = getVal (prefix + " Amount", 0.0f);
         }
 
-        for (int i = 0; i < 8; ++i)
+        for (int i = 0; i < 16; ++i) // Expanded from 8 to 16
         {
             auto prefix = "Mod/Slot " + juce::String (i + 1);
-            ctrlSlots[i].source = getVal (prefix + " Source", 0.0f);
             ctrlSlots[i].target = getVal (prefix + " Target", 0.0f);
             ctrlSlots[i].amount = getVal (prefix + " Amount", 0.0f);
+            // Source removed - Mod Env is implicit source
         }
 
         pbRange = getVal ("Control/PB Range", 2.0f);
@@ -341,6 +390,13 @@ namespace neon
             bpm = internalBpm;
 
         ampLevel = getVal ("Amp Output/Level", 0.8f);
+        ampVelocity = getVal ("Amp Output/Velocity", 0.5f);
+        ampAftertouch = getVal ("Amp Output/Aftertouch", 0.0f); // NEW
+        
+        // NEW: Portamento
+        portaOn = getVal ("Control/Porta On", 0.0f) > 0.5f;
+        portaTime = getVal ("Control/Porta Time", 100.0f);
+        portaMode = getVal ("Control/Porta Mode", 0.0f) > 0.5f;
 
         // Arp
         bool wasArpEnabled = arpSettings.enabled;
@@ -373,46 +429,54 @@ namespace neon
         fxSettings.modType = (int)getVal ("FX/Mod Type", 1.0f);
         fxSettings.modRate = getVal ("FX/Mod Rate", 1.0f);
         fxSettings.modDepth = getVal ("FX/Mod Depth", 0.5f);
+        fxSettings.modFeedback = getVal ("FX/Mod Feedback", 0.0f); // NEW
         fxSettings.modMix = getVal ("FX/Mod Mix", 0.0f);
 
         fxSettings.dlyTime = getVal ("FX/Dly Time", 400.0f);
+        fxSettings.dlyNoteIdx = (int)std::round (getVal ("FX/Dly Note", 4.0f)); // NEW
         fxSettings.dlyFeedback = getVal ("FX/Dly FB", 0.3f);
         fxSettings.dlyMix = getVal ("FX/Dly Mix", 0.0f);
         fxSettings.dlySync = getVal ("FX/Dly Sync", 0.0f) > 0.5f;
 
+        fxSettings.rvbTime = getVal ("FX/Rvb Time", 2.0f); // NEW
         fxSettings.rvbSize = getVal ("FX/Rvb Size", 0.5f);
         fxSettings.rvbDamp = getVal ("FX/Rvb Damp", 0.5f);
-        fxSettings.rvbWidth = getVal ("FX/Rvb Width", 0.5f);
+        fxSettings.rvbPredelay = getVal ("FX/Rvb Predelay", 0.0f); // NEW
         fxSettings.rvbMix = getVal ("FX/Rvb Mix", 0.0f);
 
         // Update DSP parameters
         chorus.setRate (fxSettings.modRate);
         chorus.setDepth (fxSettings.modDepth);
-        chorus.setCentreDelay (fxSettings.modType == 3 ? 7.0f : 20.0f); // Flanger usually uses shorter delay
+        chorus.setFeedback (fxSettings.modFeedback); // NEW
+        chorus.setCentreDelay (fxSettings.modType == 3 ? 7.0f : 20.0f); // Flanger uses shorter delay
         chorus.setMix (fxSettings.modType == 2 ? 0.0f : fxSettings.modMix); // Phaser uses its own mix
 
         phaser.setRate (fxSettings.modRate);
         phaser.setDepth (fxSettings.modDepth);
+        phaser.setFeedback (fxSettings.modFeedback); // NEW
         phaser.setMix (fxSettings.modType == 2 ? fxSettings.modMix : 0.0f);
 
         delay.feedback = fxSettings.dlyFeedback;
         delay.mix = fxSettings.dlyMix;
         float actualDlyTime = fxSettings.dlyTime;
         if (fxSettings.dlySync) {
+            // Use note divisions for tempo-synced delay
             static constexpr float divs[] = { 0.0625f, 0.125f, 0.25f, 0.5f, 1.0f, 2.0f, 4.0f, 8.0f, 16.0f };
-            int idx = juce::jlimit (0, 8, (int)std::round(getVal("FX/Dly Time", 4.0f))); // Note selector might be reusing time param
-            // For now let's just use the MS value or map it. Actually Arp uses Rate Note idx.
-            // Let's keep it simple and just use the MS value for now unless user asks for more sync.
+            int idx = juce::jlimit (0, 8, fxSettings.dlyNoteIdx);
+            double beatsPerSec = bpm / 60.0;
+            double secPerBeat = 1.0 / beatsPerSec;
+            actualDlyTime = (float)(secPerBeat * divs[idx] * 1000.0); // Convert to ms
         }
         delay.line.setDelay (actualDlyTime * (float)sampleRate / 1000.0f);
 
         juce::dsp::Reverb::Parameters rvbParams;
-        rvbParams.roomSize = fxSettings.rvbSize;
+        rvbParams.roomSize = juce::jmap (fxSettings.rvbTime, 0.0f, 10.0f, 0.0f, 1.0f); // Map time to room size
         rvbParams.damping = fxSettings.rvbDamp;
-        rvbParams.width = fxSettings.rvbWidth;
+        rvbParams.width = 1.0f; // Use full stereo width
         rvbParams.wetLevel = fxSettings.rvbMix;
         rvbParams.dryLevel = 1.0f - (fxSettings.rvbMix * 0.5f);
         reverb.setParameters (rvbParams);
+        // Note: Predelay would require a separate delay line, skipping for now
         
         // Push most critical per-block global params to active voices
         // (Envelopes are updated in noteOn or if we want real-time parameter changes we do it here)
@@ -497,12 +561,12 @@ namespace neon
         if (sr <= 0.0) return 0.0f;
 
         // Apply Delay
-        if (settings.delayMs > 0.01f && state.noteOnTime > 0)
-        {
-            double elapsedMs = juce::Time::getMillisecondCounterHiRes() - state.noteOnTime;
-            if (elapsedMs < (double)settings.delayMs)
-                return 0.0f;
-        }
+        double elapsedMs = 0.0;
+        if (state.noteOnTime > 0)
+            elapsedMs = juce::Time::getMillisecondCounterHiRes() - state.noteOnTime;
+        
+        if (settings.delayMs > 0.01f && elapsedMs < (double)settings.delayMs)
+            return 0.0f;
 
         double rateHz = settings.rateHz;
         if (settings.syncMode)
@@ -551,6 +615,17 @@ namespace neon
         {
             state.phase -= 1.0f;
             state.sampleHoldTriggered = false; // Reset trigger on wrap
+        }
+        
+        // NEW: Apply Fade envelope
+        if (settings.fadeMs > 0.01f && state.noteOnTime > 0)
+        {
+            double fadeElapsed = elapsedMs - (double)settings.delayMs; // Fade starts after delay
+            if (fadeElapsed < (double)settings.fadeMs)
+            {
+                float fadeGain = (float)(fadeElapsed / (double)settings.fadeMs);
+                out *= juce::jlimit (0.0f, 1.0f, fadeGain);
+            }
         }
         
         return out;
@@ -672,20 +747,9 @@ namespace neon
                     for (int i = 0; i < 4; ++i)
                         applyMod (modSlots[i].target, rawMod * (modSlots[i].amount / 100.0f));
 
-                    // Control/MIDI Matrix
-                    auto getCtrlVal = [&](CtrlSource src) -> float {
-                        switch (src) {
-                            case CtrlSource::PitchBend: return pitchWheel;
-                            case CtrlSource::ModWheel:  return modWheel;
-                            case CtrlSource::Aftertouch: return aftertouch;
-                            case CtrlSource::Velocity:   return v.velocity;
-                            case CtrlSource::KeyTrack:   return (v.midiNote - 60.0f) / 60.0f;
-                            default: return 0.0f;
-                        }
-                    };
-
-                    for (int i = 0; i < 8; ++i)
-                        applyMod (ctrlSlots[i].target, getCtrlVal(static_cast<CtrlSource>(std::round(ctrlSlots[i].source))) * (ctrlSlots[i].amount / 100.0f));
+                    // Control Matrix (Expanded to 16 slots, using Mod Env as source)
+                    for (int i = 0; i < 16; ++i)
+                        applyMod (ctrlSlots[i].target, rawMod * (ctrlSlots[i].amount / 100.0f));
 
                     // LFO Matrix
                     for (int l = 0; l < 3; ++l)
@@ -699,6 +763,29 @@ namespace neon
                     }
                 }
 
+                // Portamento: Interpolate frequency towards target
+                if (portaOn && v.currentGlideFreq != v.targetFrequency)
+                {
+                    float glideSpeed = portaTime; // in milliseconds
+                    if (glideSpeed < 1.0f) glideSpeed = 1.0f;
+                    
+                    // Calculate glide rate per sample
+                    float glideSamples = (glideSpeed / 1000.0f) * (float)sampleRate;
+                    float glideRate = 1.0f / glideSamples;
+                    
+                    // Linear interpolation towards target
+                    float diff = v.targetFrequency - v.currentGlideFreq;
+                    v.currentGlideFreq += diff * glideRate;
+                    
+                    // Snap to target if very close
+                    if (std::abs(diff) < 0.01f)
+                        v.currentGlideFreq = v.targetFrequency;
+                    
+                    // Update oscillator frequencies with glided value
+                    v.osc1.currentFrequency = v.currentGlideFreq;
+                    v.osc2.currentFrequency = v.currentGlideFreq;
+                }
+
                 // 1. Oscillators with Unison
                 float osc1SumL = 0, osc1SumR = 0;
                 float osc2SumL = 0, osc2SumR = 0;
@@ -709,7 +796,9 @@ namespace neon
                     
                     if (sIndex % 8 == 0)
                     {
-                        float envShift = pitchEnv * (pitchEnvAmount * 24.0f);
+                        // NEW: Scale pitch envelope amount by velocity and aftertouch
+                        float scaledPitchEnvAmt = pitchEnvAmount * (1.0f + v.velocity * pitchEnvVelocity + v.aftertouch * pitchEnvAftertouch);
+                        float envShift = pitchEnv * (scaledPitchEnvAmt * 24.0f);
                         float pitchMult = std::pow(2.0f, envShift / 12.0f);
                         float baseFrequency = vFreq * pitchMult;
                         float norm = 1.0f / std::sqrt((float)count);
@@ -764,7 +853,14 @@ namespace neon
                 // We only update coefficients every 8 samples to save massive CPU
                 if ((v.decimationCounter - 1) % 8 == 0)
                 {
-                    float totalOctaves = midInOctaves + kTrackOctaves + (envF * filterEnvAmount / 10.0f) + (v.mFiltCut * 5.0f);
+                    // NEW: Add velocity and aftertouch modulation to filter cutoff
+                    float velocityMod = (v.velocity - 0.5f) * 2.0f * filterVelocity * 3.0f; // ±3 octaves max
+                    float aftertouchMod = v.aftertouch * filterAftertouch * 3.0f; // +3 octaves max
+                    
+                    // NEW: Scale filter envelope amount by velocity and aftertouch
+                    float scaledFilterEnvAmt = filterEnvAmount * (1.0f + v.velocity * filterEnvVelocity + v.aftertouch * filterEnvAftertouch);
+                    
+                    float totalOctaves = midInOctaves + kTrackOctaves + (envF * scaledFilterEnvAmt / 10.0f) + (v.mFiltCut * 5.0f) + velocityMod + aftertouchMod;
                     float modulatedHz = 20.0f * std::pow (2.0f, totalOctaves);
                     modulatedHz = juce::jlimit (20.0f, (float)sampleRate * 0.45f, modulatedHz);
 
@@ -812,7 +908,10 @@ namespace neon
                 }
 
                 // 3. Final Amp & Sum
-                float ampGain = envA * v.velocity * ampLevel;
+                // NEW: Apply amp velocity and aftertouch modulation
+                float velocityGain = 1.0f + (v.velocity - 1.0f) * ampVelocity; // Scale by velocity sensitivity
+                float aftertouchGain = 1.0f + v.aftertouch * ampAftertouch; // Add aftertouch boost
+                float ampGain = envA * velocityGain * aftertouchGain * ampLevel;
                 vL[s] = sampL * ampGain;
                 vR[s] = sampR * ampGain;
             }

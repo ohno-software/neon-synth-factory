@@ -10,15 +10,18 @@ namespace neon
         LadderFilterModule (const juce::String& name, const juce::Colour& color) 
             : ModuleBase (name, color)
         {
+            // Row 1: Type, Cutoff, Res, Slope
             addChoiceParameter ("Type", NeonRegistry::getFilterTypes(), 0);
             addParameter ("Cutoff",   20.0f, 20000.0f, 20000.0f);
             addParameter ("Res",      0.0f, 1.0f, 0.0f);
-            addParameter ("Drive",    1.0f, 10.0f, 1.0f);
-            
             addParameter ("Slope",    0.0f, 1.0f, 1.0f, true);
             if (auto* p = parameters.back()) p->setBinaryLabels ("12dB", "24dB");
-
+            
+            // Row 2: KeyTrack, Drive, Velocity, Aftertouch
             addParameter ("KeyTrack", 0.0f, 1.0f, 0.5f, false, 0.0f, false, true);
+            addParameter ("Drive",    1.0f, 10.0f, 1.0f);
+            addParameter ("Velocity", 0.0f, 1.0f, 0.0f); // NEW: Filter velocity sensitivity
+            addParameter ("Aftertouch", 0.0f, 1.0f, 0.0f); // NEW: Filter aftertouch sensitivity
             
             lastAdjustedIndex = 0;
         }
@@ -38,8 +41,8 @@ namespace neon
             int filterType = (int)parameters[0]->getValue(); // 0=LP, 1=HP, 2=BP
             float cutoff = parameters[1]->getValue();
             float res = parameters[2]->getValue();
-            float drive = parameters[3]->getValue(); // 1.0 to 10.0
-            bool is24dB = parameters[4]->getValue() > 0.5f;
+            bool is24dB = parameters[3]->getValue() > 0.5f; // Slope
+            float drive = parameters[5]->getValue(); // Drive (1.0 to 10.0)
 
             // Visualization constants
             float height = r.getHeight();

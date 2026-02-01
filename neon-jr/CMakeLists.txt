@@ -15,6 +15,10 @@ add_subdirectory(${JUCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}/JUCE)
 # Add neon-components module
 add_subdirectory(${COMPONENTS_DIR} ${CMAKE_CURRENT_BINARY_DIR}/neon-components)
 
+# Add wavetable binary data
+file(GLOB_RECURSE WAVE_FILES "${CMAKE_CURRENT_SOURCE_DIR}/waves-1/*.wav")
+juce_add_binary_data(NeonJrBinaryData SOURCES ${WAVE_FILES})
+
 # Create the Plugin
 juce_add_plugin(NeonJr
     PRODUCT_NAME "Neon Jr"
@@ -42,6 +46,7 @@ target_sources(NeonJr
 
 target_link_libraries(NeonJr
     PRIVATE
+        NeonJrBinaryData
         neon_ui_components
         juce::juce_gui_basics
         juce::juce_gui_extra

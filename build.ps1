@@ -15,7 +15,7 @@ $ErrorActionPreference = "Stop"
 
 $RootDir = $PSScriptRoot
 $SynthDir = Join-Path $RootDir $Synth
-$BuildDir = Join-Path $SynthDir "build"
+$BuildDir = Join-Path $RootDir "build\$Synth"
 $ArtifactsDir = Join-Path $RootDir "artifacts\$Synth"
 
 if (-not (Test-Path $SynthDir)) {

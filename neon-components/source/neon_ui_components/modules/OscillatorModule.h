@@ -11,23 +11,30 @@ namespace neon
         OscillatorModule (const juce::String& name, const juce::Colour& color) 
             : ModuleBase (name, color)
         {
+            // PAGE 1: Row 1: Waveform, Volume, Transp, Detune
             addParameter ("Waveform",  0.0f, 200.0f, 0.0f, false, 1.0f);
-            addParameter ("Symmetry",  0.0f, 1.0f, 0.5f, false, 0.0f, false, true);
-            addParameter ("Detune",    -100.0f, 100.0f, 0.0f);
+            addParameter ("Volume",    0.0f, 1.0f, 0.8f);
             addParameter ("Transp",    -24.0f, 24.0f, 0.0f, false, 1.0f);
+            addParameter ("Detune",    -100.0f, 100.0f, 0.0f);
+            
+            // PAGE 1: Row 2: Phase, KeySync, Unison, USpread
             addParameter ("Phase",     0.0f, 360.0f, 0.0f, false, 0.0f, false, true);
             addParameter ("KeySync",   0.0f, 1.0f, 1.0f, true);
-            // Labeling for key sync is handled via registry or hardcoded in card for now
             if (auto* p = parameters.back()) p->setBinaryLabels("OFF", "ON");
-
-            addParameter ("Volume",    0.0f, 1.0f, 0.8f);
-            addParameter ("Pan",       -1.0f, 1.0f, 0.0f);
-            
-            addParameter ("Drive",     0.0f, 1.0f, 0.0f);
-            addParameter ("BitRedux",  0.0f, 1.0f, 0.0f);
-            addParameter ("Fold",      0.0f, 1.0f, 0.0f);
             addParameter ("Unison",    1.0f, 8.0f, 1.0f, false, 1.0f);
             addParameter ("USpread",   0.0f, 1.0f, 0.2f);
+            
+            // PAGE 2: Row 1: Drive, BitRedux, Symmetry, Fold
+            addParameter ("Drive",     0.0f, 1.0f, 0.0f);
+            addParameter ("BitRedux",  0.0f, 1.0f, 0.0f);
+            addParameter ("Symmetry",  0.0f, 1.0f, 0.5f, false, 0.0f, false, true);
+            addParameter ("Fold",      0.0f, 1.0f, 0.0f);
+            
+            // PAGE 2: Row 2: Pan, [Blank], [Blank], [Blank]
+            addParameter ("Pan",       -1.0f, 1.0f, 0.0f);
+            addSpacer(); // Blank
+            addSpacer(); // Blank
+            addSpacer(); // Blank
 
             loadWaveforms();
 
@@ -91,13 +98,15 @@ namespace neon
                 float width = r.getWidth();
                 float height = r.getHeight();
 
-                // Parameters affecting visualization
-                float symmetry = parameters[1]->getValue(); // 0 to 1
-                float phase    = parameters[4]->getValue(); // 0 to 360
-                float volume   = parameters[6]->getValue();   // 0 to 1
-                float drive    = parameters[8]->getValue();    // 0 to 1
-                float bitRedux = parameters[9]->getValue(); // 0 to 1
-                float fold     = parameters[10]->getValue(); // 0 to 1
+                // Parameters affecting visualization (updated indices after reorganization)
+                // New order: Waveform(0), Volume(1), Transp(2), Detune(3), Phase(4), KeySync(5), 
+                //            Unison(6), USpread(7), Drive(8), BitRedux(9), Symmetry(10), Fold(11), Pan(12)
+                float volume   = parameters[1]->getValue();   // 0 to 1
+                float phase    = parameters[4]->getValue();   // 0 to 360
+                float drive    = parameters[8]->getValue();   // 0 to 1
+                float bitRedux = parameters[9]->getValue();  // 0 to 1
+                float symmetry = parameters[10]->getValue(); // 0 to 1
+                float fold     = parameters[11]->getValue(); // 0 to 1
 
                 path.startNewSubPath (startX, midY - data[0] * height * 0.4f * volume);
                 

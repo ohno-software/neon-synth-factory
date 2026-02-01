@@ -73,9 +73,9 @@ namespace neon
             else if (msg.isPitchWheel())
                 signalPath.setPitchWheel (juce::jmap ((float)msg.getPitchWheelValue(), 0.0f, 16383.0f, -1.0f, 1.0f));
             else if (msg.isAftertouch())
-                signalPath.setAftertouch (msg.getAfterTouchValue() / 127.0f);
+                signalPath.setPolyAftertouch (msg.getNoteNumber(), msg.getAfterTouchValue() / 127.0f);
             else if (msg.isChannelPressure())
-                signalPath.setAftertouch (msg.getChannelPressureValue() / 127.0f);
+                signalPath.setChannelAftertouch (msg.getChannelPressureValue() / 127.0f);
             else if (msg.isController())
             {
                 if (msg.getControllerNumber() == 1) // Mod Wheel

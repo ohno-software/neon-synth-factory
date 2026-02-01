@@ -25,10 +25,10 @@ namespace neon
         auto filter = std::make_unique<LadderFilterModule> ("Ladder Filter", theme.filter);
         auto amp = std::make_unique<AmpModule> ("Amp Output", theme.amplifier);
         
-        auto envPitch = std::make_unique<DahdsrModule> ("Pitch Env", theme.envelope, true);
-        auto envFilter = std::make_unique<DahdsrModule> ("Filter Env", theme.envelope, true);
-        auto envMod = std::make_unique<DahdsrModule> ("Mod Env", theme.envelope, false);
-        auto envAmp = std::make_unique<DahdsrModule> ("Amp Env", theme.envelope, false);
+        auto envPitch = std::make_unique<DahdsrModule> ("Pitch Env", theme.envelope, false, true);  // Include modulation parameters
+        auto envFilter = std::make_unique<DahdsrModule> ("Filter Env", theme.envelope, false, true); // Include modulation parameters
+        auto envMod = std::make_unique<DahdsrModule> ("Mod Env", theme.envelope, false);  // No modulation parameters
+        auto envAmp = std::make_unique<DahdsrModule> ("Amp Env", theme.envelope, false);  // No modulation parameters
 
         auto lfo1 = std::make_unique<LfoModule> ("LFO 1", theme.modulation);
         auto lfo2 = std::make_unique<LfoModule> ("LFO 2", theme.modulation);
@@ -37,16 +37,14 @@ namespace neon
         auto arp = std::make_unique<ArpModule> ("Arp", theme.modulation);
 
         // Control Matrix Module (Now renamed to MOD)
+        // Expanded to 16 slots (4 pages), no Source parameter (uses Mod Env implicitly)
         auto modMatrix = std::make_unique<ModMatrixModule> ("Mod", theme.modulation);
-        auto ctrlSources = getCtrlSourceNames();
         auto targets = getModTargetNames();
 
-        for (int i = 1; i <= 8; ++i)
+        for (int i = 1; i <= 16; ++i)
         {
-            modMatrix->addChoiceParameter ("Slot " + juce::String(i) + " Source", ctrlSources, 0);
             modMatrix->addChoiceParameter ("Slot " + juce::String(i) + " Target", targets, 0);
             modMatrix->addParameter       ("Slot " + juce::String(i) + " Amount", -100.0f, 100.0f, 0.0f);
-            modMatrix->addSpacer();
         }
 
         // FX Module
@@ -119,7 +117,6 @@ namespace neon
 
         float pb = audioProcessor.getSignalPath().getPitchWheel();
         float mw = audioProcessor.getSignalPath().getModWheel();
-        float at = audioProcessor.getSignalPath().getAftertouch();
 
         for (auto* m : modules)
         {
@@ -127,7 +124,7 @@ namespace neon
             m->setVoiceCount (activeVoices);
             
             if (auto* ctrl = dynamic_cast<ControlModule*> (m))
-                ctrl->updateMeters (pb, mw, at);
+                ctrl->updateMeters (pb, mw, 0.0f); // Aftertouch is now per-voice, show 0 for global display
         }
     }
 

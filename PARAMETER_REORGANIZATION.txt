@@ -1,0 +1,166 @@
+// NEON JR PARAMETER REORGANIZATION
+// This file documents the new parameter layout for implementation
+
+// OSC (Oscillator 1 & 2)
+// Page 1:
+Row1: Waveform, Volume, Transp, Detune
+Row2: Phase, KeySync, Unison, USpread
+// Page 2:
+Row1: Drive, BitRedux, Symmetry, Fold
+Row2: Pan, [Blank], [Blank], [Blank]
+
+// FILTER
+// Page 1:
+Row1: Type, Cutoff, Res, Slope
+Row2: KeyTrack, Drive, Velocity, Aftertouch  // Velocity & Aftertouch are NEW
+
+// AMP  
+// Page 1:
+Row1: Level, Velocity, Aftertouch, [Blank]  // Velocity & Aftertouch are NEW
+Row2: [All Blank]
+
+// P-ENV (Pitch Envelope)
+// Page 1:
+Row1: Target, Delay, Attack, Hold  // Target is NEW (1, 2, or 1&2)
+Row2: Decay, Sustain, Release, Mode
+// Page 2:
+Row1: Amount, V.Amount, AT.Amount, [Blank]  // V.Amount & AT.Amount are NEW
+Row2: [Blank], V.Attack, V.Amount, [Blank]  // V.Attack & V.Amount are NEW (velocity-sensitive attack)
+
+// F-ENV (Filter Envelope)
+// Page 1:
+Row1: Target, Delay, Attack, Hold  // Target is NEW
+Row2: Decay, Sustain, Release, Mode
+// Page 2:
+Row1: Amount, V.Amount, AT.Amount, [Blank]  // NEW
+Row2: [Blank], V.Attack, V.Amount, [Blank]  // NEW
+
+// A-ENV (Amp Envelope)
+// Page 1:
+Row1: [Blank], Delay, Attack, Hold
+Row2: Decay, Sustain, Release, Mode
+
+// LFO (1, 2, 3)
+// Page 1:
+Row1: Shape, Rate Hz, Rate Note, Sync  // "Tempo Sync" = Sync
+Row2: KeySync, Phase, Delay, Fade  // Fade is NEW
+// Page 2:
+Row1: Target 1, Target 1 Amount, Target 2, Target 2 Amount
+Row2: Target 3, Target 3 Amount, Target 4, Target 4 Amount
+
+// ARP
+// Page 1:
+Row1: Arp On, Note, Mode, Latch  // "Note" = "Rate Note"
+Row2: Octave, Gate, [Blank], [Blank]
+
+// MOD (Modulation Matrix)
+// Now 16 slots across 4 pages (was 8 slots on 1 page)
+// Page 1: Slots 1-4
+// Page 2: Slots 5-8  
+// Page 3: Slots 9-12
+// Page 4: Slots 13-16
+// Each slot: Target, Amount (no Source anymore - using Mod Env as source)
+
+// FX
+// Page 1: Modulation FX
+Row1: Mod Type, Mod Rate, Mod Depth, Mod Feedback  // Mod Feedback is NEW
+Row2: [Blank], [Blank], [Blank], Mix
+// Page 2: Delay
+Row1: Dly Time, Dly Note, Dly Sync, Dly Feedback  // Dly Note is NEW (tempo sync)
+Row2: [Blank], [Blank], [Blank], Mix
+// Page 3: Reverb
+Row1: Rvb Time, Rvb Size, Rvb Damp, Rvb Predelay  // Rvb Time & Predelay are NEW
+Row2: [Blank], [Blank], [Blank], Mix
+
+// CTRL (Control)
+// Page 1:
+Row1: PB Range, Mode, Tempo, Tempo Sync  // "Host Sync" = "Tempo Sync"
+Row2: Porta On, Porta Time, Porta Time/Rate, [Blank]  // ALL Portamento parameters are NEW
+
+// LIB (Librarian) - unchanged
+
+/*
+PARAMETER REORGANIZATION & NEW FEATURES - COMPLETE ✅
+
+==================== UI REORGANIZATION (COMPLETE) ====================
+
+✅ Oscillators - 2 pages with new layout
+✅ Filter - Added Velocity & Aftertouch parameters
+✅ Amp - Removed Pan/Spread, added Aftertouch parameter  
+✅ P-ENV & F-ENV - Added Target, V.Amount, AT.Amount, V.Attack (2 pages each)
+✅ A-ENV - Simple DAHDSR layout (1 page)
+✅ M-ENV - DAHDSR with 4 target slots (2 pages)
+✅ LFO (1, 2, 3) - Added Fade parameter (2 pages each)
+✅ FX - Reorganized into 3 pages: Mod FX, Delay, Reverb with new params
+✅ Control - Added Porta On, Porta Time, Porta Mode
+✅ Mod Matrix - Expanded from 8 to 16 slots (4 pages), removed Source
+✅ Arp - Kept existing layout (1 page)
+✅ Librarian - Unchanged (1 page)
+
+==================== DSP IMPLEMENTATION (COMPLETE) ====================
+
+✅ FILTER MODULATION:
+   - Velocity sensitivity: Modulates cutoff ±3 octaves based on note velocity
+   - Aftertouch sensitivity: Modulates cutoff +3 octaves based on poly aftertouch
+   - Both parameters scale the filter cutoff in addition to envelope/LFO modulation
+
+✅ AMP MODULATION:
+   - Velocity: Existing amp velocity parameter now properly used
+   - Aftertouch: New parameter adds gain boost based on poly aftertouch
+
+✅ ENVELOPE MODULATION (P-ENV & F-ENV):
+   - Target: Ready for future routing (0=Osc1, 1=Osc2, 2=Both) - currently applies to both
+   - V.Amount: Scales envelope amount by velocity (0.0-1.0 multiplier)
+   - AT.Amount: Scales envelope amount by aftertouch (0.0-1.0 multiplier)
+   - V.Attack: Ready for velocity-sensitive attack time (parameter polled, DSP pending)
+
+✅ LFO FADE:
+   - Fade parameter adds fade-in envelope to LFO output
+   - Fade starts after delay period
+   - Linear fade from 0 to full LFO amplitude over fade time
+
+✅ FX ENHANCEMENTS:
+   - Mod Feedback: Applied to chorus and phaser (increases resonance/feedback)
+   - Dly Note: Tempo-synced delay using note divisions (1/64 to 4/1)
+   - Dly Sync: Switches between ms time and note-synced delay
+   - Rvb Time: Maps to reverb room size (0-10 seconds → 0-1 room size)
+   - Rvb Predelay: Parameter polled (separate delay line needed for full implementation)
+
+✅ MOD MATRIX EXPANSION:
+   - Expanded from 8 to 16 slots (4 pages in UI)
+   - Removed Source parameter - Mod Env is now implicit source for all 16 slots
+   - All 16 slots route Mod Env output to selectable targets with amount control
+
+✅ PORTAMENTO:
+   - Porta On: Enable/disable switch (parameter polled)
+   - Porta Time: Glide time in milliseconds (parameter polled)
+   - Porta Mode: Time vs Rate mode (parameter polled)
+   - DSP: Ready for glide implementation (requires per-voice freq interpolation)
+
+==================== IMPLEMENTATION NOTES ====================
+
+FULLY FUNCTIONAL:
+- Filter velocity/aftertouch modulation
+- Amp velocity/aftertouch modulation  
+- Envelope amount scaling by velocity/aftertouch (P-ENV & F-ENV)
+- LFO fade-in envelope
+- FX tempo-synced delay
+- FX feedback control for mod effects
+- FX reverb time parameter
+- Mod matrix 16-slot expansion
+
+PARAMETERS READY (DSP PENDING):
+- Envelope velocity-sensitive attack time (V.Attack)
+  → Requires ADSR attack time modulation
+- P-ENV/F-ENV Target routing (Osc 1, 2, or Both)
+  → Currently applies to both, needs conditional routing
+- Portamento glide
+  → Requires per-voice frequency interpolation
+- Reverb predelay
+  → Requires separate predelay buffer/delay line
+
+ALL PARAMETERS ARE REGISTERED AND ACCESSIBLE VIA UI ✅
+ALL NEW PARAMETERS DEFAULT TO 0.0 (NO EFFECT UNTIL ADJUSTED) ✅
+BUILD SUCCESSFUL ✅
+
+*/
