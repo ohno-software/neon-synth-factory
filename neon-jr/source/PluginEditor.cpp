@@ -6,6 +6,8 @@
 #include <neon_ui_components/modules/FxModule.h>
 #include <neon_ui_components/modules/ControlModule.h>
 #include <neon_ui_components/modules/ModMatrixModule.h>
+#include <neon_ui_components/modules/NoiseModule.h>
+#include <neon_ui_components/modules/SubOscModule.h>
 
 namespace neon
 {
@@ -20,7 +22,8 @@ namespace neon
         
         // Modules
         auto osc1 = std::make_unique<OscillatorModule> ("Oscillator 1", theme.oscillator);
-        auto osc2 = std::make_unique<OscillatorModule> ("Oscillator 2", theme.oscillator);
+        auto subOsc = std::make_unique<SubOscModule> ("Sub Osc", theme.oscillator);
+        auto noise = std::make_unique<NoiseModule> ("Noise", theme.oscillator);
         auto filter = std::make_unique<LadderFilterModule> ("Ladder Filter", theme.filter);
         auto amp = std::make_unique<AmpModule> ("Amp Output", theme.amplifier);
         
@@ -31,19 +34,25 @@ namespace neon
 
         auto lfo1 = std::make_unique<LfoModule> ("LFO 1", theme.modulation);
         auto lfo2 = std::make_unique<LfoModule> ("LFO 2", theme.modulation);
-        auto lfo3 = std::make_unique<LfoModule> ("LFO 3", theme.modulation);
 
         auto arp = std::make_unique<ArpModule> ("Arp", theme.modulation);
 
         // Control Matrix Module (Now renamed to MOD)
-        // Expanded to 16 slots (4 pages), no Source parameter (uses Mod Env implicitly)
+        // 4-slot modulation matrix with [Source][Target][Amount]
         auto modMatrix = std::make_unique<ModMatrixModule> ("Mod", theme.modulation);
         auto targets = getModTargetNames();
+        std::vector<juce::String> sources = {"None", "Velocity", "Aftertouch", "Note#", 
+                                             "CC 1 (Mod Wheel)", "CC 11 (Expression)", "CC 2 (Breath)", 
+                                             "CC 4 (Foot Pedal)", "CC 64 (Sustain)",
+                                             "CC 16", "CC 17", "CC 18", "CC 19",
+                                             "CC 80", "CC 81", "CC 82", "CC 83"};
 
-        for (int i = 1; i <= 16; ++i)
+        for (int i = 1; i <= 4; ++i)
         {
+            modMatrix->addChoiceParameter ("Slot " + juce::String(i) + " Source", sources, 0);
             modMatrix->addChoiceParameter ("Slot " + juce::String(i) + " Target", targets, 0);
             modMatrix->addParameter       ("Slot " + juce::String(i) + " Amount", -100.0f, 100.0f, 0.0f);
+            modMatrix->addChoiceParameter (" ", {" "}, 0); // Spacer for alignment
         }
 
         // FX Module
@@ -67,22 +76,22 @@ namespace neon
             envMod->addParameter       ("Slot " + juce::String(i) + " Amount", -100.0f, 100.0f, 0.0f);
         }
 
-        modules.add (std::move (osc1));
-        modules.add (std::move (osc2));
-        modules.add (std::move (filter));
-        modules.add (std::move (amp));
-        modules.add (std::move (envPitch));
-        modules.add (std::move (envFilter));
-        modules.add (std::move (envMod));
-        modules.add (std::move (envAmp));
-        modules.add (std::move (lfo1));
-        modules.add (std::move (lfo2));
-        modules.add (std::move (lfo3));
-        modules.add (std::move (arp));
-        modules.add (std::move (modMatrix));
-        modules.add (std::move (fxModule));
-        modules.add (std::move (ctrlModule));
-        modules.add (std::move (libModule));
+        modules.add (std::move (osc1));        // 0 - OSC
+        modules.add (std::move (subOsc));      // 1 - SUB
+        modules.add (std::move (noise));       // 2 - NOISE
+        modules.add (std::move (envPitch));    // 3 - P-ENV
+        modules.add (std::move (filter));      // 4 - FILTER
+        modules.add (std::move (envFilter));   // 5 - F-ENV
+        modules.add (std::move (amp));         // 6 - AMP
+        modules.add (std::move (envAmp));      // 7 - A-ENV
+        modules.add (std::move (lfo1));        // 8 - LFO1
+        modules.add (std::move (lfo2));        // 9 - LFO2
+        modules.add (std::move (modMatrix));   // 10 - MOD
+        modules.add (std::move (envMod));      // 11 - M-ENV
+        modules.add (std::move (fxModule));    // 12 - FX
+        modules.add (std::move (ctrlModule));  // 13 - CTRL
+        modules.add (std::move (arp));         // 14 - ARP
+        modules.add (std::move (libModule));   // 15 - LIB (startup)
 
         for (auto* m : modules)
             addChildComponent (m);

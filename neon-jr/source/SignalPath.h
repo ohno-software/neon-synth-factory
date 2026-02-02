@@ -44,7 +44,7 @@ namespace neon
 
         struct OscState
         {
-            float phases[8] = {0.0f}; // Support up to 8 unison voices
+            float phases[4] = {0.0f}; // Support up to 4 unison voices
             float currentFrequency = 440.0f;
             
             // Parameter cache (polled from registry)
@@ -105,21 +105,23 @@ namespace neon
             float targetFrequency = 440.0f;
             float currentGlideFreq = 440.0f;
 
-            OscState osc1, osc2;
-            std::array<LfoState, 3> lfos;
+            OscState osc1;
+            std::array<LfoState, 2> lfos;
             juce::ADSR ampEnv, filterEnv, pitchEnv, modEnv;
             juce::dsp::StateVariableTPTFilter<float> filter1;
             juce::dsp::StateVariableTPTFilter<float> filter2;
+            
+            // XORshift noise generator state (ultra-cheap CPU)
+            uint32_t noiseState = 0x12345678;
 
             // Decimation cache for CPU optimization
-            float u1Freqs[8], u1GainsL[8], u1GainsR[8];
-            float u2Freqs[8], u2GainsL[8], u2GainsR[8];
-            float mOsc1Pitch = 0, mOsc2Pitch = 0;
+            float u1Freqs[4], u1GainsL[4], u1GainsR[4];
+            float mOsc1Pitch = 0;
             float mOsc1Sym = 0, mOsc1Fold = 0, mOsc1Drive = 0, mOsc1Bit = 0, mOsc1Lvl = 0, mOsc1Pan = 0;
-            float mOsc2Sym = 0, mOsc2Fold = 0, mOsc2Drive = 0, mOsc2Bit = 0, mOsc2Lvl = 0, mOsc2Pan = 0;
-            float mOsc1Det = 0, mOsc2Det = 0;
+            float mOsc1Det = 0;
+            float mSubLevel = 0, mSubPitch = 0;
             float mFiltCut = 0, mFiltRes = 0;
-            float mLfoAmts[3][4] = {{0.0f}};
+            float mLfoAmts[2][4] = {{0.0f}};
             int decimationCounter = 0;
 
             void reset()
@@ -127,7 +129,6 @@ namespace neon
                 for (int i = 0; i < 8; ++i)
                 {
                     osc1.phases[i] = 0.0f;
-                    osc2.phases[i] = 0.0f;
                 }
                 for (auto& l : lfos) l.reset(0.0f, -1.0);
                 
@@ -138,10 +139,11 @@ namespace neon
                 filter1.reset();
                 filter2.reset();
                 
-                for (int i = 0; i < 3; ++i)
+                for (int i = 0; i < 2; ++i)
                     for (int j = 0; j < 4; ++j)
                         mLfoAmts[i][j] = 0.0f;
 
+                noiseState = 0x12345678 + (uint32_t)(midiNote * 997);
                 isActive.store (false);
                 midiNote = -1;
             }
@@ -233,8 +235,11 @@ namespace neon
         std::array<Voice, numVoices> voices;
         
         // Global Parameter Cache (shared across voices)
-        OscState globalOsc1, globalOsc2;
-        std::array<LfoSettings, 3> globalLfos;
+        OscState globalOsc1;
+        float globalSubLevel = 0.0f;
+        float globalSubOctave = -1.0f; // -2, -1, or -0.5 octaves
+        float globalNoiseVolume = 0.0f;
+        std::array<LfoSettings, 2> globalLfos;
         int   filterType = 0; // 0=LP, 1=HP, 2=BP
         float baseFilterCutoff = 20000.0f;
         float baseFilterRes = 0.0f;
