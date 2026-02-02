@@ -50,6 +50,7 @@
 // Organisms (Synth Modules)
 #include "modules/ModuleBase.h"
 #include "modules/OscillatorModule.h"
+#include "modules/SubOscModule.h"
 #include "modules/DahdsrModule.h"
 #include "modules/AdsrModule.h"
 #include "modules/FxModule.h"

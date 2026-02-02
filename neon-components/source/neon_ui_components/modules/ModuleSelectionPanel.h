@@ -78,16 +78,16 @@ namespace neon
             categoryButtons[4]->setButtonText ("MAIN");
             
             // Setup category mappings: category index -> array of module indices
-            // OSC -> OSC1(0), OSC2(1), P-ENV(4)
-            categoryModules[0] = {0, 1, 4};
-            // FILTER -> FILTER(2), F-ENV(5)
-            categoryModules[1] = {2, 5};
-            // AMP -> AMP(3), A-ENV(7)
-            categoryModules[2] = {3, 7};
-            // M/FX -> MOD(12), FX(13)
-            categoryModules[3] = {12, 13};
-            // MAIN -> LIB(15), CTRL(14)
-            categoryModules[4] = {15, 14};
+            // OSC -> OSC(0), SUB(1), NOISE(2), P-ENV(3)
+            categoryModules[0] = {0, 1, 2, 3};
+            // FILTER -> FILTER(4), F-ENV(5)
+            categoryModules[1] = {4, 5};
+            // AMP -> AMP(6), A-ENV(7)
+            categoryModules[2] = {6, 7};
+            // M/FX -> LFO1(8), LFO2(9), MOD(10), M-ENV(11), FX(12)
+            categoryModules[3] = {8, 9, 10, 11, 12};
+            // MAIN -> CTRL(13), ARP(14), LIB(15)
+            categoryModules[4] = {13, 14, 15};
             
             // Default to MAIN category
             setActiveCategory (4);
@@ -250,8 +250,8 @@ namespace neon
         juce::String getModuleName (int index)
         {
             const char* names[] = {
-                "OSC 1", "OSC 2", "FILTER", "AMP", "P-ENV", "F-ENV", "M-ENV", "A-ENV",
-                "LFO 1", "LFO 2", "LFO 3", "ARP", "MOD", "FX", "CTRL", "LIB"
+                "OSC", "SUB", "NOISE", "P-ENV", "FILTER", "F-ENV", "AMP", "A-ENV",
+                "LFO 1", "LFO 2", "MOD", "M-ENV", "FX", "CTRL", "ARP", "LIB"
             };
             if (index >= 0 && index < 16) return names[index];
             return "???";

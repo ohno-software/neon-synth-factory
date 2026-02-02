@@ -1,7 +1,7 @@
 param (
-    [Parameter(Mandatory=$true)]
+    [Parameter(Mandatory=$false)]
     [ValidateSet("neon-jr")]
-    [string]$Synth,
+    [string]$Synth = "neon-jr",
 
     [Parameter(Mandatory=$false)]
     [ValidateSet("Debug", "Release")]

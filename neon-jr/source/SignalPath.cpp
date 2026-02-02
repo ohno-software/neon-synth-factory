@@ -170,6 +170,7 @@ namespace neon
             voiceToUse->isActive.store (true);
             voiceToUse->noteOnTime = juce::Time::getMillisecondCounterHiRes();
             voiceToUse->decimationCounter = juce::Random::getSystemRandom().nextInt (8);
+            voiceToUse->noiseState = 0x12345678 + (uint32_t)(midiNote * 997) + (uint32_t)(velocity * 100000);
 
             float freq = (float)juce::MidiMessage::getMidiNoteInHertz (midiNote);
             voiceToUse->targetFrequency = freq;
@@ -190,16 +191,11 @@ namespace neon
             
             voiceToUse->osc1.currentFrequency = freq;
             if (globalOsc1.keySync) {
-                for (int i = 0; i < 8; ++i) voiceToUse->osc1.phases[i] = globalOsc1.phaseStart;
-            }
-
-            voiceToUse->osc2.currentFrequency = freq;
-            if (globalOsc2.keySync) {
-                for (int i = 0; i < 8; ++i) voiceToUse->osc2.phases[i] = globalOsc2.phaseStart;
+                for (int i = 0; i < 4; ++i) voiceToUse->osc1.phases[i] = globalOsc1.phaseStart;
             }
 
             // LFOs KeySync
-            for (int i = 0; i < 3; ++i)
+            for (int i = 0; i < 2; ++i)
             {
                 if (globalLfos[i].keySync)
                     voiceToUse->lfos[i].reset (globalLfos[i].phaseStart, voiceToUse->noteOnTime);
@@ -209,7 +205,6 @@ namespace neon
 
             // Apply global params initially
             voiceToUse->osc1.waveIdx = globalOsc1.waveIdx;
-            voiceToUse->osc2.waveIdx = globalOsc2.waveIdx;
 
             voiceToUse->ampEnv.setParameters (ampParams);
             voiceToUse->filterEnv.setParameters (filterParams);
@@ -299,12 +294,21 @@ namespace neon
             state.drive    = getVal (name + "/Drive", 0.0f);
             state.bitRedux = getVal (name + "/BitRedux", 0.0f);
             state.fold     = getVal (name + "/Fold", 0.0f);
-            state.unison   = (int)juce::jlimit(1.0f, 8.0f, getVal (name + "/Unison", 1.0f));
+            state.unison   = (int)juce::jlimit(1.0f, 4.0f, getVal (name + "/Unison", 1.0f));
             state.uSpread  = getVal (name + "/USpread", 0.2f);
         };
 
         updateGlobalOsc (globalOsc1, "Oscillator 1");
-        updateGlobalOsc (globalOsc2, "Oscillator 2");
+        
+        // Sub Osc
+        globalSubLevel = getVal ("Sub Osc/Volume", 0.0f);
+        int octaveChoice = (int)getVal ("Sub Osc/Octave", 1.0f);
+        if (octaveChoice == 0) globalSubOctave = -2.0f;
+        else if (octaveChoice == 1) globalSubOctave = -1.0f;
+        else globalSubOctave = -0.5f;
+        
+        // Noise
+        globalNoiseVolume = getVal ("Noise/Volume", 0.0f);
 
         // LFOs
         auto updateGlobalLfo = [&](LfoSettings& settings, const juce::String& name) {
@@ -326,7 +330,6 @@ namespace neon
 
         updateGlobalLfo (globalLfos[0], "LFO 1");
         updateGlobalLfo (globalLfos[1], "LFO 2");
-        updateGlobalLfo (globalLfos[2], "LFO 3");
 
         // Filter
         filterType = (int)getVal ("Ladder Filter/Type", 0.0f);
@@ -340,10 +343,14 @@ namespace neon
 
         // Env - Update ADSR from DAHDSR params
         auto getEnvParams = [&] (const juce::String& mod) {
+            float sustain = getVal (mod + "/Sustain", 0.7f);
+            // Fix: Ensure sustain is never exactly 0 to preserve release behavior
+            if (sustain < 0.001f) sustain = 0.001f;
+            
             return juce::ADSR::Parameters({
                 getVal (mod + "/Attack", 10.0f) / 1000.0f,
                 getVal (mod + "/Decay", 500.0f) / 1000.0f,
-                getVal (mod + "/Sustain", 0.7f),
+                sustain,
                 getVal (mod + "/Release", 500.0f) / 1000.0f
             });
         };
@@ -658,7 +665,6 @@ namespace neon
             // Fetch wavetables
             int tableCount = (int)wavetables.size();
             const auto& table1 = wavetables[juce::jlimit(0, juce::jmax(0, tableCount - 1), globalOsc1.waveIdx)];
-            const auto& table2 = wavetables[juce::jlimit(0, juce::jmax(0, tableCount - 1), globalOsc2.waveIdx)];
 
             float midInOctaves = std::log2 (juce::jlimit(20.0f, (float)sampleRate * 0.45f, baseFilterCutoff) / 20.0f);
             float kTrackOctaves = ((v.midiNote - 60.0f) / 12.0f) * filterKeyTrack;
@@ -682,13 +688,13 @@ namespace neon
                 // Optimized Modulation: Only update mod matrix every 8 samples
                 if (v.decimationCounter++ % 8 == 0)
                 {
-                    v.mOsc1Pitch = pbShift; v.mOsc2Pitch = pbShift; // Start with Pitch Bend
+                    v.mOsc1Pitch = pbShift; // Start with Pitch Bend
                     v.mOsc1Sym = 0; v.mOsc1Fold = 0; v.mOsc1Drive = 0; v.mOsc1Bit = 0; v.mOsc1Lvl = 0; v.mOsc1Pan = 0;
-                    v.mOsc2Sym = 0; v.mOsc2Fold = 0; v.mOsc2Drive = 0; v.mOsc2Bit = 0; v.mOsc2Lvl = 0; v.mOsc2Pan = 0;
-                    v.mOsc1Det = 0; v.mOsc2Det = 0;
+                    v.mOsc1Det = 0;
+                    v.mSubLevel = 0; v.mSubPitch = 0;
                     v.mFiltCut = 0; v.mFiltRes = 0;
                     
-                    for (int i = 0; i < 3; ++i)
+                    for (int i = 0; i < 2; ++i)
                         for (int j = 0; j < 4; ++j)
                             v.mLfoAmts[i][j] = 0.0f;
 
@@ -705,23 +711,8 @@ namespace neon
                             case ModTarget::Osc1Pan:      v.mOsc1Pan   += amount; break;
                             case ModTarget::Osc1Detune:   v.mOsc1Det   += amount * 100.0f; break; 
                             
-                            case ModTarget::Osc2Pitch:    v.mOsc2Pitch += amount * 12.0f; break;
-                            case ModTarget::Osc2Symmetry: v.mOsc2Sym   += amount; break;
-                            case ModTarget::Osc2Fold:     v.mOsc2Fold  += amount; break;
-                            case ModTarget::Osc2Drive:    v.mOsc2Drive += amount; break;
-                            case ModTarget::Osc2BitRedux: v.mOsc2Bit   += amount; break;
-                            case ModTarget::Osc2Level:    v.mOsc2Lvl   += amount; break;
-                            case ModTarget::Osc2Pan:      v.mOsc2Pan   += amount; break;
-                            case ModTarget::Osc2Detune:   v.mOsc2Det   += amount * 100.0f; break; 
-
-                            case ModTarget::Osc1And2Pitch:    v.mOsc1Pitch += amount * 12.0f; v.mOsc2Pitch += amount * 12.0f; break;
-                            case ModTarget::Osc1And2Symmetry: v.mOsc1Sym   += amount; v.mOsc2Sym   += amount; break;
-                            case ModTarget::Osc1And2Fold:     v.mOsc1Fold  += amount; v.mOsc2Fold  += amount; break;
-                            case ModTarget::Osc1And2Drive:    v.mOsc1Drive += amount; v.mOsc2Drive += amount; break;
-                            case ModTarget::Osc1And2BitRedux: v.mOsc1Bit   += amount; v.mOsc2Bit   += amount; break;
-                            case ModTarget::Osc1And2Level:    v.mOsc1Lvl   += amount; v.mOsc2Lvl   += amount; break;
-                            case ModTarget::Osc1And2Pan:      v.mOsc1Pan   += amount; v.mOsc2Pan   += amount; break;
-                            case ModTarget::Osc1And2Detune:   v.mOsc1Det   += amount * 100.0f; v.mOsc2Det += amount * 100.0f; break;
+                            case ModTarget::SubLevel:     v.mSubLevel  += amount; break;
+                            case ModTarget::SubPitch:     v.mSubPitch  += amount * 12.0f; break;
                             
                             case ModTarget::FilterCutoff: v.mFiltCut   += amount; break;
                             case ModTarget::FilterRes:    v.mFiltRes   += amount; break;
@@ -734,10 +725,6 @@ namespace neon
                             case ModTarget::Lfo2Amount2: v.mLfoAmts[1][1] += amount; break;
                             case ModTarget::Lfo2Amount3: v.mLfoAmts[1][2] += amount; break;
                             case ModTarget::Lfo2Amount4: v.mLfoAmts[1][3] += amount; break;
-                            case ModTarget::Lfo3Amount1: v.mLfoAmts[2][0] += amount; break;
-                            case ModTarget::Lfo3Amount2: v.mLfoAmts[2][1] += amount; break;
-                            case ModTarget::Lfo3Amount3: v.mLfoAmts[2][2] += amount; break;
-                            case ModTarget::Lfo3Amount4: v.mLfoAmts[2][3] += amount; break;
 
                             default: break;
                         }
@@ -752,7 +739,7 @@ namespace neon
                         applyMod (ctrlSlots[i].target, rawMod * (ctrlSlots[i].amount / 100.0f));
 
                     // LFO Matrix
-                    for (int l = 0; l < 3; ++l)
+                    for (int l = 0; l < 2; ++l)
                     {
                         float lfoVal = calculateLfo (v.lfos[l], globalLfos[l], (float)sampleRate, bpm);
                         for (int i = 0; i < 4; ++i)
@@ -783,15 +770,13 @@ namespace neon
                     
                     // Update oscillator frequencies with glided value
                     v.osc1.currentFrequency = v.currentGlideFreq;
-                    v.osc2.currentFrequency = v.currentGlideFreq;
                 }
 
                 // 1. Oscillators with Unison
                 float osc1SumL = 0, osc1SumR = 0;
-                float osc2SumL = 0, osc2SumR = 0;
                 
                 auto renderUnison = [&](OscState& gState, float& vFreq, float* vPhases, float* uFreqsCache, float* uGainsLCache, float* uGainsRCache, float pitchEnv, const juce::AudioBuffer<float>& table, float modDetune, float& rowL, float& rowR, int sIndex) {
-                    int count = juce::jlimit(1, 8, gState.unison);
+                    int count = juce::jlimit(1, 4, gState.unison);
                     float sL = 0, sR = 0;
                     
                     if (sIndex % 8 == 0)
@@ -833,19 +818,32 @@ namespace neon
                 tOsc1.volume   = juce::jlimit(0.0f, 1.0f, tOsc1.volume + v.mOsc1Lvl);
                 tOsc1.pan      = juce::jlimit(-1.0f, 1.0f, tOsc1.pan + v.mOsc1Pan);
 
-                OscState tOsc2 = globalOsc2;
-                tOsc2.symmetry = juce::jlimit(0.01f, 0.99f, tOsc2.symmetry + v.mOsc2Sym);
-                tOsc2.fold     = juce::jlimit(0.0f, 1.0f, tOsc2.fold + v.mOsc2Fold);
-                tOsc2.drive    = juce::jlimit(0.0f, 1.0f, tOsc2.drive + v.mOsc2Drive);
-                tOsc2.bitRedux = juce::jlimit(0.0f, 1.0f, tOsc2.bitRedux + v.mOsc2Bit);
-                tOsc2.volume   = juce::jlimit(0.0f, 1.0f, tOsc2.volume + v.mOsc2Lvl);
-                tOsc2.pan      = juce::jlimit(-1.0f, 1.0f, tOsc2.pan + v.mOsc2Pan);
-
                 renderUnison(tOsc1, v.osc1.currentFrequency, v.osc1.phases, v.u1Freqs, v.u1GainsL, v.u1GainsR, envP, table1, v.mOsc1Det + (v.mOsc1Pitch * 100.0f), osc1SumL, osc1SumR, s);
-                renderUnison(tOsc2, v.osc2.currentFrequency, v.osc2.phases, v.u2Freqs, v.u2GainsL, v.u2GainsR, envP, table2, v.mOsc2Det + (v.mOsc2Pitch * 100.0f), osc2SumL, osc2SumR, s);
 
-                float sampL = (osc1SumL + osc2SumL) * 0.5f;
-                float sampR = (osc1SumR + osc2SumR) * 0.5f;
+                // 1b. Sub Oscillator (simple sine wave at lower octave)
+                float subSumL = 0.0f, subSumR = 0.0f;
+                float effectiveSubLevel = juce::jlimit(0.0f, 1.0f, globalSubLevel + v.mSubLevel);
+                if (effectiveSubLevel > 0.0001f)
+                {
+                    float subFreq = v.osc1.currentFrequency * std::pow(2.0f, globalSubOctave + (v.mSubPitch / 12.0f));
+                    float subPhase = v.osc1.phases[0]; // Use OSC1's first unison phase for consistency
+                    float subSample = std::sin(subPhase * juce::MathConstants<float>::twoPi) * effectiveSubLevel;
+                    subSumL = subSample;
+                    subSumR = subSample;
+                }
+
+                // 1c. Fast Noise Generation (XORshift32 - ultra-cheap)
+                float noiseSamp = 0.0f;
+                if (globalNoiseVolume > 0.0001f)
+                {
+                    v.noiseState ^= v.noiseState << 13;
+                    v.noiseState ^= v.noiseState >> 17;
+                    v.noiseState ^= v.noiseState << 5;
+                    noiseSamp = (float)(int)v.noiseState * (1.0f / 2147483648.0f) * globalNoiseVolume;
+                }
+
+                float sampL = (osc1SumL + subSumL + noiseSamp) * 0.5f;
+                float sampR = (osc1SumR + subSumR + noiseSamp) * 0.5f;
 
                 float driveGain = 1.0f + (baseFilterDrive - 1.0f) * 3.0f; // Aggressive gain multiplier
 
@@ -1076,7 +1074,6 @@ namespace neon
             voiceToUse->noteOnTime = juce::Time::getMillisecondCounterHiRes();
             float freq = (float)juce::MidiMessage::getMidiNoteInHertz (nextNote);
             voiceToUse->osc1.currentFrequency = freq;
-            voiceToUse->osc2.currentFrequency = freq;
             voiceToUse->ampEnv.setParameters (ampParams);
             voiceToUse->ampEnv.noteOn();
             voiceToUse->filterEnv.setParameters (filterParams);
