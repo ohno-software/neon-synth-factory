@@ -38,6 +38,8 @@ jobs:
 
       - name: Setup CMake and Ninja
         uses: lukka/get-cmake@latest
+        with:
+          cmakeVersion: ${{ matrix.platform == 'Android' && '~3.28.0' || 'latest' }}
 
       - name: Install Ninja (Ubuntu)
         if: runner.os == 'Linux'
