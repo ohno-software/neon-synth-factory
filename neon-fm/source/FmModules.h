@@ -20,8 +20,8 @@ namespace neon
             // Page 1, Row 1: Waveform, Ratio, Detune, Level
             addChoiceParameter ("Waveform", { "Sine", "Triangle", "Saw", "Square" }, 0);
 
-            // Ratio: common FM ratios. We use a continuous param 0.5 - 16.0
-            addParameter ("Ratio", 0.5f, 16.0f, getDefaultRatio (opIndex), false, 0.0f, false, false);
+            // Ratio: DX7-style snapping to 0.5 increments (0.5, 1.0, 1.5, ..., 16.0)
+            addParameter ("Ratio", 0.5f, 16.0f, getDefaultRatio (opIndex), false, 0.5f, false, true);
 
             addParameter ("Detune", -50.0f, 50.0f, 0.0f, false, 0.0f, false, true);
             addParameter ("Level", 0.0f, 1.0f, getDefaultLevel (opIndex));
@@ -140,7 +140,7 @@ namespace neon
             // Ratio text
             g.setColour (accentColor.withAlpha (0.5f));
             g.setFont (14.0f);
-            g.drawText ("x" + juce::String (ratio, 2), r.getX() + 50, r.getY() + 15, 80, 20,
+            g.drawText ("x" + juce::String (ratio, 3), r.getX() + 50, r.getY() + 15, 80, 20,
                          juce::Justification::centredLeft);
         }
     };
