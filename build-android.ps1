@@ -58,11 +58,15 @@ if (-not (Test-Path $AndroidToolchainFile)) {
     Write-Error "Android toolchain file not found: $AndroidToolchainFile"
 }
 
+Write-Host "Toolchain file: $AndroidToolchainFile" -ForegroundColor Green
+
 # Create AndroidStudio project first, then we'll use Gradle to build
+# Use Unix-style paths for cross-platform compatibility
+$ToolchainUnix = $AndroidToolchainFile -replace '\\', '/'
+
 cmake -S $SynthDir -B $BuildDir `
-    -G "Ninja" `
     -DCMAKE_BUILD_TYPE=$Config `
-    -DCMAKE_TOOLCHAIN_FILE=$AndroidToolchainFile `
+    "-DCMAKE_TOOLCHAIN_FILE=$ToolchainUnix" `
     -DANDROID_ABI=arm64-v8a `
     -DANDROID_PLATFORM=android-24 `
     -DANDROID_STL=c++_shared
