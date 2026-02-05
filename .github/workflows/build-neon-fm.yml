@@ -1,0 +1,88 @@
+name: Build Neon FM
+
+on:
+  push:
+    branches: [ main ]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform: PC
+          - os: macos-latest
+            platform: Mac
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Fetch JUCE
+        run: |
+          git clone --depth 1 https://github.com/juce-framework/JUCE.git JUCE
+
+      - name: Setup MSVC (Windows)
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Setup CMake and Ninja
+        uses: lukka/get-cmake@latest
+
+      - name: Build Neon FM
+        shell: pwsh
+        run: |
+          ./build.ps1 -Synth neon-fm -Config Release
+
+      - name: Prepare Artifacts
+        shell: pwsh
+        run: |
+          mkdir out
+          if ("${{ runner.os }}" -eq "Windows") {
+              mkdir dist-pc
+              cp "artifacts/neon-fm/Standalone/*.exe" dist-pc/
+              cp -r artifacts/neon-fm/VST3 dist-pc/
+              Compress-Archive -Path dist-pc/* -DestinationPath "Neon-FM-PC.zip"
+          }
+          elseif ("${{ runner.os }}" -eq "macOS") {
+              mkdir dist-mac
+              cp -r "artifacts/neon-fm/Standalone/*.app" dist-mac/
+              cp -r artifacts/neon-fm/VST3 dist-mac/
+          }
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Neon-FM-${{ matrix.platform }}
+          path: |
+            Neon-FM-PC.zip
+            dist-mac/
+
+  release:
+    name: Create Alpha Release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            Neon-FM-PC/Neon-FM-PC.zip
+            Neon-FM-Mac/**/*
+          draft: false
+          prerelease: true
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
