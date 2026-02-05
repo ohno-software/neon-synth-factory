@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(NeonJr VERSION 0.1.0)
+project(NeonTemplate VERSION 0.1.0)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -15,38 +15,31 @@ add_subdirectory(${JUCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}/JUCE)
 # Add neon-components module
 add_subdirectory(${COMPONENTS_DIR} ${CMAKE_CURRENT_BINARY_DIR}/neon-components)
 
-# Add wavetable binary data
-file(GLOB_RECURSE WAVE_FILES "${CMAKE_CURRENT_SOURCE_DIR}/waves-1/*.wav")
-juce_add_binary_data(NeonJrBinaryData SOURCES ${WAVE_FILES})
-
 # Create the Plugin
-juce_add_plugin(NeonJr
-    PRODUCT_NAME "Neon Jr"
+juce_add_plugin(NeonTemplate
+    PRODUCT_NAME "Neon Template"
     COMPANY_NAME "Neon Audio"
-    BUNDLE_ID com.neonaudio.neonjr
+    BUNDLE_ID com.neonaudio.neontemplate
     PLUGIN_MANUFACTURER_CODE NeAu
-    PLUGIN_CODE NeJr
-    VST2_ID NeJ2
-    IS_SYNTH TRUE
+    PLUGIN_CODE NeTm
+    IS_SYNTH FALSE
     NEEDS_MIDI_INPUT TRUE
     NEEDS_MIDI_OUTPUT FALSE
     IS_MIDI_EFFECT FALSE
     EDITOR_RESIZABLE TRUE
-    FORMATS VST3 Standalone AndroidStudio
+    FORMATS VST3 Standalone
     STANDALONE_MENU_BAR TRUE
-    PRODUCT_NAME "Neon Jr"
+    PRODUCT_NAME "Neon Template"
 )
 
-target_sources(NeonJr
+target_sources(NeonTemplate
     PRIVATE
         source/PluginProcessor.cpp
         source/PluginEditor.cpp
-        source/SignalPath.cpp
 )
 
-target_link_libraries(NeonJr
+target_link_libraries(NeonTemplate
     PRIVATE
-        NeonJrBinaryData
         neon_ui_components
         juce::juce_gui_basics
         juce::juce_gui_extra
@@ -59,11 +52,11 @@ target_link_libraries(NeonJr
         juce::juce_dsp
 )
 
-target_compile_definitions(NeonJr
+target_compile_definitions(NeonTemplate
     PUBLIC
         JUCE_VST3_CAN_REPLACE_VST2=0
         JUCE_STANDALONE_FILTER_WINDOW_USE_NAVIGATIONS_BUTTONS=1
 )
 
 # Standard Juce aide setup
-juce_generate_juce_header(NeonJr)
+juce_generate_juce_header(NeonTemplate)

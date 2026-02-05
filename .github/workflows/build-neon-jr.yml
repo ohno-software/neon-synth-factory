@@ -21,6 +21,8 @@ jobs:
             platform: PC
           - os: macos-latest
             platform: Mac
+          - os: ubuntu-latest
+            platform: Android
 
     steps:
       - name: Checkout code
@@ -37,10 +39,29 @@ jobs:
       - name: Setup CMake and Ninja
         uses: lukka/get-cmake@latest
 
+      - name: Setup Android NDK (Android)
+        if: matrix.platform == 'Android'
+        uses: nttld/setup-ndk@v1
+        id: setup-ndk
+        with:
+          ndk-version: r26d
+          add-to-path: true
+
+      - name: Setup Java (Android)
+        if: matrix.platform == 'Android'
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
       - name: Build Neon Jr
         shell: pwsh
         run: |
-          ./build.ps1 -Synth neon-jr -Config Release
+          if ("${{ matrix.platform }}" -eq "Android") {
+            ./build-android.ps1 -Synth neon-jr -Config Release
+          } else {
+            ./build.ps1 -Synth neon-jr -Config Release
+          }
 
       - name: Prepare Artifacts
         shell: pwsh
@@ -55,11 +76,23 @@ jobs:
               Compress-Archive -Path dist-pc/* -DestinationPath "Neon-Jr-PC.zip"
           }
           # Mac: Move .app and waves
-          else {
+          elseif ("${{ runner.os }}" -eq "macOS") {
               mkdir dist-mac
               cp -r "artifacts/neon-jr/Standalone/*.app" dist-mac/
               cp -r artifacts/neon-jr/waves-1 dist-mac/
               cp -r artifacts/neon-jr/VST3 dist-mac/
+          }
+          # Android: Package APK and waves
+          elseif ("${{ matrix.platform }}" -eq "Android") {
+              mkdir dist-android
+              # Copy APK from artifacts directory
+              if (Test-Path "artifacts/neon-jr/Android") {
+                  cp artifacts/neon-jr/Android/*.apk dist-android/ -ErrorAction SilentlyContinue
+                  if (Test-Path "artifacts/neon-jr/Android/waves-1") {
+                      cp -r artifacts/neon-jr/Android/waves-1 dist-android/
+                  }
+              }
+              Compress-Archive -Path dist-android/* -DestinationPath "Neon-Jr-Android.zip"
           }
 
       - name: Upload Artifacts
@@ -69,6 +102,7 @@ jobs:
           path: |
             Neon-Jr-PC.zip
             dist-mac/
+            Neon-Jr-Android.zip
 
   release:
     name: Create Alpha Release
@@ -85,6 +119,7 @@ jobs:
           files: |
             Neon-Jr-PC/Neon-Jr-PC.zip
             Neon-Jr-Mac/**/*
+            Neon-Jr-Android/Neon-Jr-Android.zip
           draft: false
           prerelease: true
           generate_release_notes: true
