@@ -127,6 +127,7 @@ namespace neon
         void updateParams();
 
         double sampleRate = 44100.0;
+        double oversampledRate = 88200.0;
         int samplesPerBlock = 512;
         double bpm = 120.0;
 
@@ -199,6 +200,12 @@ namespace neon
         } delay;
 
         juce::AudioBuffer<float> tempBuffer;
+
+        // 2x oversampling to reduce FM aliasing
+        static constexpr int oversamplingOrder = 1; // 2^1 = 2x
+        juce::dsp::Oversampling<float> oversampling { 2, oversamplingOrder,
+            juce::dsp::Oversampling<float>::filterHalfBandPolyphaseIIR, true };
+        juce::AudioBuffer<float> osBuffer;
 
         // Polyphony
         static constexpr int numVoices = 16;

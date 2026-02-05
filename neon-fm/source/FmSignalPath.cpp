@@ -24,6 +24,12 @@ namespace neon
         samplesPerBlock = samplesPerBlockExpected;
         tempBuffer.setSize (2, samplesPerBlockExpected);
 
+        // Prepare 2x oversampling
+        oversampling.initProcessing ((size_t) samplesPerBlockExpected);
+        oversampledRate = sr * (1 << oversamplingOrder);
+        int osBlockSize = samplesPerBlockExpected * (1 << oversamplingOrder);
+        osBuffer.setSize (2, osBlockSize);
+
         juce::dsp::ProcessSpec spec;
         spec.sampleRate = sr;
         spec.maximumBlockSize = (juce::uint32) samplesPerBlockExpected;
@@ -37,11 +43,17 @@ namespace neon
         for (auto& v : voices)
         {
             for (auto& op : v.ops)
-                op.prepare (sr);
+                op.prepare (oversampledRate);  // operators run at oversampled rate
 
-            v.filter1.prepare (spec);
-            v.filter2.prepare (spec);
-            v.ampEnv.setSampleRate (sr);
+            // Filters also run at oversampled rate
+            juce::dsp::ProcessSpec osSpec;
+            osSpec.sampleRate = oversampledRate;
+            osSpec.maximumBlockSize = (juce::uint32) osBlockSize;
+            osSpec.numChannels = 2;
+
+            v.filter1.prepare (osSpec);
+            v.filter2.prepare (osSpec);
+            v.ampEnv.setSampleRate (oversampledRate);
         }
     }
 
@@ -379,20 +391,29 @@ namespace neon
         buffer->clear (bufferToFill.startSample, numSamples);
         updateParams();
 
-        auto* outL = buffer->getWritePointer (0, bufferToFill.startSample);
-        auto* outR = buffer->getWritePointer (1, bufferToFill.startSample);
+        // --- Oversampled voice rendering ---
+        // Upsample: create an oversampled block from the output buffer
+        juce::dsp::AudioBlock<float> inputBlock (*buffer);
+        inputBlock = inputBlock.getSubBlock ((size_t) bufferToFill.startSample, (size_t) numSamples);
+        auto osBlock = oversampling.processSamplesUp (inputBlock);
+        auto osNumSamples = (int) osBlock.getNumSamples();
+
+        osBlock.clear();
+
+        auto* outL = osBlock.getChannelPointer (0);
+        auto* outR = osBlock.getChannelPointer (1);
 
         for (int voiceIdx = 0; voiceIdx < numVoices; ++voiceIdx)
         {
             auto& v = voices[voiceIdx];
             if (!v.isActive.load()) continue;
 
-            for (int s = 0; s < numSamples; ++s)
+            for (int s = 0; s < osNumSamples; ++s)
             {
-                // Portamento glide
+                // Portamento glide (at oversampled rate)
                 if (portaOn && v.currentGlideFreq != v.targetFrequency)
                 {
-                    float glideRate = 1.0f - std::exp (-1.0f / (portaTime * 0.001f * (float) sampleRate));
+                    float glideRate = 1.0f - std::exp (-1.0f / (portaTime * 0.001f * (float) oversampledRate));
                     v.currentGlideFreq += (v.targetFrequency - v.currentGlideFreq) * glideRate;
                 }
                 else
@@ -404,7 +425,7 @@ namespace neon
                 float pbSemitones = pitchWheel * pbRange;
                 float baseFreq = v.currentGlideFreq * std::pow (2.0f, pbSemitones / 12.0f);
 
-                // LFO processing for this voice
+                // LFO processing for this voice (at oversampled rate)
                 float lfoOutputs[2] = { 0.0f, 0.0f };
                 for (int li = 0; li < 2; ++li)
                 {
@@ -418,20 +439,17 @@ namespace neon
                         int idx = juce::jlimit (0, 8, ls.rateNoteIdx);
                         float beatsPerSec = (float)(bpm / 60.0);
                         float hz = beatsPerSec / divs[idx];
-                        phaseInc = hz / (float) sampleRate;
+                        phaseInc = hz / (float) oversampledRate;
                     }
                     else
                     {
-                        phaseInc = ls.rateHz / (float) sampleRate;
+                        phaseInc = ls.rateHz / (float) oversampledRate;
                     }
 
                     lfoOutputs[li] = computeLfo (lState, ls.shape, phaseInc);
                 }
 
                 // Apply LFO modulation to operators
-                // LFO modulation targets for FM:
-                // We apply modulation amounts to base frequency and operator levels
-                // (simplified - the modulation target enum handles this)
                 float lfoFreqMod = 0.0f;
                 float lfoOpLevelMod[4] = { 0.0f };
 
@@ -444,16 +462,14 @@ namespace neon
                         float lfoVal = lfoOutputs[li] * amount;
 
                         if (target == (int) FmModTarget::MasterPitch)
-                            lfoFreqMod += lfoVal * 2.0f; // semitones
+                            lfoFreqMod += lfoVal * 2.0f;
 
-                        // Op1-4 Level
                         if (target >= (int) FmModTarget::Op1Level && target <= (int) FmModTarget::Op4Level)
                         {
                             int opIdx = target - (int) FmModTarget::Op1Level;
                             lfoOpLevelMod[opIdx] += lfoVal;
                         }
 
-                        // Op1-4 Ratio  
                         if (target >= (int) FmModTarget::Op1Ratio && target <= (int) FmModTarget::Op4Ratio)
                         {
                             int opIdx = target - (int) FmModTarget::Op1Ratio;
@@ -462,7 +478,6 @@ namespace neon
 
                         if (target == (int) FmModTarget::FilterCutoff)
                         {
-                            // modulate cutoff
                             float modCut = baseFilterCutoff * std::pow (2.0f, lfoVal * 4.0f);
                             baseFilterCutoff = juce::jlimit (20.0f, 20000.0f, modCut);
                         }
@@ -493,7 +508,7 @@ namespace neon
                 // Velocity scaling on output
                 float velScale = 1.0f - ampVelocity + ampVelocity * v.velocity;
 
-                // Filter
+                // Filter (runs at oversampled rate for better response)
                 float cutoff = baseFilterCutoff;
                 if (filterKeyTrack > 0.0f)
                 {
@@ -536,10 +551,11 @@ namespace neon
             }
         }
 
-        // === FX Processing ===
-        juce::dsp::AudioBlock<float> block (*buffer);
-        block = block.getSubBlock ((size_t) bufferToFill.startSample, (size_t) numSamples);
-        juce::dsp::ProcessContextReplacing<float> context (block);
+        // --- Downsample back to normal rate ---
+        oversampling.processSamplesDown (inputBlock);
+
+        // === FX Processing (at normal sample rate) ===
+        juce::dsp::ProcessContextReplacing<float> context (inputBlock);
 
         // Modulation FX (Chorus/Phaser/Flanger)
         if (fxSettings.modType > 0 && fxSettings.modMix > 0.0f)
