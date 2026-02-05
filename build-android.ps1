@@ -78,13 +78,19 @@ if ($LASTEXITCODE -ne 0) {
 # 3. Build Android Studio project
 Write-Host "--- Building Android Studio project ---" -ForegroundColor Cyan
 
+# Detect project name from CMakeLists.txt (e.g. NeonJr, NeonFM)
+$ProjectName = (Get-Content (Join-Path $SynthDir "CMakeLists.txt") | Select-String "project\(([^ ]+)" | ForEach-Object { $_.Matches.Groups[1].Value })
+if (-not $ProjectName) { $ProjectName = $Synth }
+$ArtefactsDirName = "${ProjectName}_artefacts"
+Write-Host "Looking for artefacts directory: $ArtefactsDirName" -ForegroundColor Green
+
 # Find the generated Android Studio project
-$AndroidBuildDir = Get-ChildItem -Path $BuildDir -Recurse -Directory -Filter "NeonJr_artefacts" | Select-Object -First 1
+$AndroidBuildDir = Get-ChildItem -Path $BuildDir -Recurse -Directory -Filter $ArtefactsDirName | Select-Object -First 1
 
 if (-not $AndroidBuildDir) {
     Write-Warning "Android Studio artifacts not found directly. Building with cmake..."
     cmake --build $BuildDir --config $Config
-    $AndroidBuildDir = Get-ChildItem -Path $BuildDir -Recurse -Directory -Filter "NeonJr_artefacts" | Select-Object -First 1
+    $AndroidBuildDir = Get-ChildItem -Path $BuildDir -Recurse -Directory -Filter $ArtefactsDirName | Select-Object -First 1
 }
 
 if ($AndroidBuildDir) {

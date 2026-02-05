@@ -41,9 +41,15 @@ jobs:
         with:
           cmakeVersion: ${{ matrix.platform == 'Android' && '~3.28.0' || 'latest' }}
 
-      - name: Install Ninja (Ubuntu)
+      - name: Install Linux Dependencies (Android/Ubuntu)
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y ninja-build
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build \
+            libasound2-dev libcurl4-openssl-dev libfreetype6-dev \
+            libx11-dev libxcomposite-dev libxcursor-dev libxext-dev \
+            libxinerama-dev libxrandr-dev libxrender-dev \
+            libwebkit2gtk-4.1-dev libglu1-mesa-dev mesa-common-dev
 
       - name: Setup Android NDK (Android)
         if: matrix.platform == 'Android'

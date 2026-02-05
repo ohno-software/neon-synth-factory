@@ -21,6 +21,8 @@ jobs:
             platform: PC
           - os: macos-latest
             platform: Mac
+          - os: ubuntu-latest
+            platform: Android
 
     steps:
       - name: Checkout code
@@ -36,11 +38,49 @@ jobs:
 
       - name: Setup CMake and Ninja
         uses: lukka/get-cmake@latest
+        with:
+          cmakeVersion: ${{ matrix.platform == 'Android' && '~3.28.0' || 'latest' }}
+
+      - name: Install Linux Dependencies (Android/Ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build \
+            libasound2-dev libcurl4-openssl-dev libfreetype6-dev \
+            libx11-dev libxcomposite-dev libxcursor-dev libxext-dev \
+            libxinerama-dev libxrandr-dev libxrender-dev \
+            libwebkit2gtk-4.1-dev libglu1-mesa-dev mesa-common-dev
+
+      - name: Setup Android NDK (Android)
+        if: matrix.platform == 'Android'
+        uses: nttld/setup-ndk@v1
+        id: setup-ndk
+        with:
+          ndk-version: r26d
+          add-to-path: true
+
+      - name: Set NDK Environment (Android)
+        if: matrix.platform == 'Android'
+        shell: bash
+        run: |
+          echo "ANDROID_NDK_ROOT=${{ steps.setup-ndk.outputs.ndk-path }}" >> $GITHUB_ENV
+          echo "ANDROID_NDK_HOME=${{ steps.setup-ndk.outputs.ndk-path }}" >> $GITHUB_ENV
+
+      - name: Setup Java (Android)
+        if: matrix.platform == 'Android'
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
 
       - name: Build Neon FM
         shell: pwsh
         run: |
-          ./build.ps1 -Synth neon-fm -Config Release
+          if ("${{ matrix.platform }}" -eq "Android") {
+            ./build-android.ps1 -Synth neon-fm -Config Release
+          } else {
+            ./build.ps1 -Synth neon-fm -Config Release
+          }
 
       - name: Prepare Artifacts
         shell: pwsh
@@ -57,6 +97,13 @@ jobs:
               cp -r "artifacts/neon-fm/Standalone/*.app" dist-mac/
               cp -r artifacts/neon-fm/VST3 dist-mac/
           }
+          elseif ("${{ matrix.platform }}" -eq "Android") {
+              mkdir dist-android
+              if (Test-Path "artifacts/neon-fm/Android") {
+                  cp artifacts/neon-fm/Android/*.apk dist-android/ -ErrorAction SilentlyContinue
+              }
+              Compress-Archive -Path dist-android/* -DestinationPath "Neon-FM-Android.zip"
+          }
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
@@ -65,6 +112,7 @@ jobs:
           path: |
             Neon-FM-PC.zip
             dist-mac/
+            Neon-FM-Android.zip
 
   release:
     name: Create Alpha Release
@@ -81,6 +129,7 @@ jobs:
           files: |
             Neon-FM-PC/Neon-FM-PC.zip
             Neon-FM-Mac/**/*
+            Neon-FM-Android/Neon-FM-Android.zip
           draft: false
           prerelease: true
           generate_release_notes: true
