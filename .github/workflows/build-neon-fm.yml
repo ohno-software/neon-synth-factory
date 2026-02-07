@@ -86,21 +86,22 @@ jobs:
         shell: pwsh
         run: |
           mkdir out
-          if ("${{ runner.os }}" -eq "Windows") {
+
+          if ("${{ matrix.platform }}" -eq "PC") {
               mkdir dist-pc
-              cp "artifacts/neon-fm/Standalone/*.exe" dist-pc/
-              cp -r artifacts/neon-fm/VST3 dist-pc/
+              Copy-Item -Path "artifacts/neon-fm/Standalone/*.exe" -Destination dist-pc/
+              Copy-Item -Path "artifacts/neon-fm/VST3" -Destination dist-pc/ -Recurse
               Compress-Archive -Path dist-pc/* -DestinationPath "Neon-FM-PC.zip"
           }
-          elseif ("${{ runner.os }}" -eq "macOS") {
+          elseif ("${{ matrix.platform }}" -eq "Mac") {
               mkdir dist-mac
-              cp -r "artifacts/neon-fm/Standalone/*.app" dist-mac/
-              cp -r artifacts/neon-fm/VST3 dist-mac/
+              Copy-Item -Path "artifacts/neon-fm/Standalone/*.app" -Destination dist-mac/ -Recurse
+              Copy-Item -Path "artifacts/neon-fm/VST3" -Destination dist-mac/ -Recurse
           }
           elseif ("${{ matrix.platform }}" -eq "Android") {
               mkdir dist-android
               if (Test-Path "artifacts/neon-fm/Android") {
-                  cp artifacts/neon-fm/Android/*.apk dist-android/ -ErrorAction SilentlyContinue
+                  Copy-Item -Path "artifacts/neon-fm/Android/*.apk" -Destination dist-android/ -ErrorAction SilentlyContinue
               }
               Compress-Archive -Path dist-android/* -DestinationPath "Neon-FM-Android.zip"
           }
