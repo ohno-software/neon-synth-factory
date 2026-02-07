@@ -95,7 +95,7 @@ jobs:
           }
           elseif ("${{ matrix.platform }}" -eq "Mac") {
               mkdir dist-mac
-              Copy-Item -Path "artifacts/neon-fm/Standalone/*.app" -Destination dist-mac/ -Recurse
+              Copy-Item -Path "artifacts/neon-fm/Standalone/Neon FM.app" -Destination dist-mac/ -Recurse
               Copy-Item -Path "artifacts/neon-fm/VST3" -Destination dist-mac/ -Recurse
           }
           elseif ("${{ matrix.platform }}" -eq "Android") {
@@ -111,9 +111,9 @@ jobs:
         with:
           name: Neon-FM-${{ matrix.platform }}
           path: |
-            Neon-FM-PC.zip
-            dist-mac/
-            Neon-FM-Android.zip
+            ${{ matrix.platform == 'PC' && 'Neon-FM-PC.zip' || '' }}
+            ${{ matrix.platform == 'Mac' && 'dist-mac/' || '' }}
+            ${{ matrix.platform == 'Android' && 'Neon-FM-Android.zip' || '' }}
 
   release:
     name: Create Alpha Release
