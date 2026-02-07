@@ -28,9 +28,8 @@ juce_add_plugin(NeonFM
     NEEDS_MIDI_OUTPUT FALSE
     IS_MIDI_EFFECT FALSE
     EDITOR_RESIZABLE TRUE
-    FORMATS VST3 Standalone AndroidStudio
+    FORMATS VST3 AU Standalone Android
     STANDALONE_MENU_BAR TRUE
-    PRODUCT_NAME "Neon FM"
 )
 
 target_sources(NeonFM
