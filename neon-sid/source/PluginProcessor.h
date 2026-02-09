@@ -1,24 +1,25 @@
 #pragma once
 
 #include <juce_audio_processors/juce_audio_processors.h>
+#include "SidSignalPath.h"
 
 namespace neon
 {
-    class NeonTemplateAudioProcessor : public juce::AudioProcessor
+    class NeonSidAudioProcessor : public juce::AudioProcessor
     {
     public:
-        NeonTemplateAudioProcessor();
-        ~NeonTemplateAudioProcessor() override;
+        NeonSidAudioProcessor();
+        ~NeonSidAudioProcessor() override;
 
-        void prepareToPlay (double sampleRate, int samplesPerBlock) override {}
-        void releaseResources() override {}
+        void prepareToPlay (double sampleRate, int samplesPerBlock) override;
+        void releaseResources() override;
 
-        void processBlock (juce::AudioBuffer<float>&, juce::MidiBuffer&) override {}
+        void processBlock (juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
 
         juce::AudioProcessorEditor* createEditor() override;
         bool hasEditor() const override { return true; }
 
-        const juce::String getName() const override { return "Neon Template"; }
+        const juce::String getName() const override { return "Neon SID"; }
 
         double getTailLengthSeconds() const override { return 0.0; }
 
@@ -34,6 +35,13 @@ namespace neon
         void getStateInformation (juce::MemoryBlock&) override {}
         void setStateInformation (const void*, int) override {}
 
-        JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (NeonTemplateAudioProcessor)
+        juce::MidiKeyboardState& getKeyboardState() { return keyboardState; }
+
+    private:
+        SidSignalPath signalPath;
+        juce::MidiKeyboardState keyboardState;
+
+        JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (NeonSidAudioProcessor)
     };
 }
+

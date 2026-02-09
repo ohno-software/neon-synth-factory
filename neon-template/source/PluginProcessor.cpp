@@ -15,3 +15,8 @@ namespace neon
         return new NeonTemplateAudioProcessorEditor(*this);
     }
 }
+
+juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()
+{
+    return new neon::NeonTemplateAudioProcessor();
+}

@@ -54,6 +54,7 @@ namespace neon
             v.filter1.prepare (osSpec);
             v.filter2.prepare (osSpec);
             v.ampEnv.setSampleRate (oversampledRate);
+            v.filterEnv.setSampleRate (oversampledRate);
         }
     }
 
@@ -143,6 +144,10 @@ namespace neon
             voiceToUse->ampEnv.setParameters (ampParams);
             voiceToUse->ampEnv.noteOn();
 
+            // Filter envelope
+            voiceToUse->filterEnv.setParameters (filterEnvParams);
+            voiceToUse->filterEnv.noteOn();
+
             // Reset LFO states for this voice
             for (int i = 0; i < 2; ++i)
             {
@@ -173,6 +178,7 @@ namespace neon
             if (v.isActive && v.midiNote == midiNote)
             {
                 v.ampEnv.noteOff();
+                v.filterEnv.noteOff();
                 for (auto& op : v.ops) op.noteOff();
             }
         }
@@ -231,6 +237,19 @@ namespace neon
         baseFilterRes = getVal ("Filter/Res", 0.0f);
         filterKeyTrack = getVal ("Filter/KeyTrack", 0.0f);
         filterIs24dB = getVal ("Filter/Slope", 1.0f) > 0.5f;
+
+        // Filter Envelope
+        {
+            float feSustain = getVal ("Filter Env/Sustain", 0.0f);
+            if (feSustain < 0.001f) feSustain = 0.001f;
+            filterEnvParams = juce::ADSR::Parameters ({
+                getVal ("Filter Env/Attack", 10.0f) / 1000.0f,
+                getVal ("Filter Env/Decay", 300.0f) / 1000.0f,
+                feSustain,
+                getVal ("Filter Env/Release", 300.0f) / 1000.0f
+            });
+            filterEnvAmount = getVal ("Filter Env/Amount", 0.0f) / 100.0f;  // stored as -100..100, normalize to -1..1
+        }
 
         // Amp
         ampLevel = getVal ("Amp Output/Level", 0.8f);
@@ -325,6 +344,7 @@ namespace neon
             if (v.isActive)
             {
                 v.ampEnv.setParameters (ampParams);
+                v.filterEnv.setParameters (filterEnvParams);
 
                 for (int i = 0; i < 4; ++i)
                     v.ops[i].setEnvelopeParams (globalOps[i].envParams);
@@ -508,8 +528,19 @@ namespace neon
                 // Velocity scaling on output
                 float velScale = 1.0f - ampVelocity + ampVelocity * v.velocity;
 
+                // Filter envelope modulation
+                float filterEnvVal = v.filterEnv.getNextSample();
+
                 // Filter (runs at oversampled rate for better response)
                 float cutoff = baseFilterCutoff;
+
+                // Apply filter envelope: bipolar amount modulates cutoff in octaves
+                if (std::abs (filterEnvAmount) > 0.001f)
+                {
+                    float envOctaves = filterEnvVal * filterEnvAmount * 8.0f;  // up to +/- 8 octaves
+                    cutoff *= std::pow (2.0f, envOctaves);
+                }
+
                 if (filterKeyTrack > 0.0f)
                 {
                     float noteFreq = (float) juce::MidiMessage::getMidiNoteInHertz (v.midiNote);

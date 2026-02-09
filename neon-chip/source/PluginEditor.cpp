@@ -1,7 +1,9 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 #include "ModulationTargets.h"
-#include "FmModules.h"
+#include "ChipModules.h"
+#include <neon_ui_components/modules/AmpModule.h>
+#include <neon_ui_components/modules/DahdsrModule.h>
 #include <neon_ui_components/modules/LfoModule.h>
 #include <neon_ui_components/modules/FxModule.h>
 #include <neon_ui_components/modules/ControlModule.h>
@@ -9,21 +11,21 @@
 namespace neon
 {
     /**
-     * FmSelectionPanel
-     * Custom module selection panel for Neon FM.
-     * Remaps categories: FM / FILTER / AMP / M-FX / MAIN
+     * ChipSelectionPanel
+     * Custom module selection panel for Neon Chip.
+     * Categories: CHIP / FILTER / AMP / M-FX / MAIN
      */
-    class FmSelectionPanel : public juce::Component
+    class ChipSelectionPanel : public juce::Component
     {
     public:
-        FmSelectionPanel()
+        ChipSelectionPanel()
         {
-            // Top row: 8 slots for category buttons (5 categories)
+            // Top row: 8 slots for category buttons (5 active)
             for (int i = 0; i < 8; ++i)
             {
                 auto btn = std::make_unique<juce::TextButton>();
                 btn->setClickingTogglesState (true);
-                btn->setRadioGroupId (3001);
+                btn->setRadioGroupId (5001);
 
                 if (i < 5)
                 {
@@ -50,7 +52,7 @@ namespace neon
             {
                 auto btn = std::make_unique<juce::TextButton>();
                 btn->setClickingTogglesState (true);
-                btn->setRadioGroupId (3002);
+                btn->setRadioGroupId (5002);
 
                 int slotIndex = i;
                 btn->onClick = [this, slotIndex] {
@@ -69,23 +71,23 @@ namespace neon
                 moduleButtons.add (std::move (btn));
             }
 
-            // Category names for FM synth
-            categoryButtons[0]->setButtonText ("FM");
+            // Category names
+            categoryButtons[0]->setButtonText ("CHIP");
             categoryButtons[1]->setButtonText ("FILTER");
             categoryButtons[2]->setButtonText ("AMP");
             categoryButtons[3]->setButtonText ("M/FX");
             categoryButtons[4]->setButtonText ("MAIN");
 
-            // FM -> ALGO(0), OP1(1), OP2(2), OP3(3), OP4(4)
-            categoryModules[0] = { 0, 1, 2, 3, 4 };
-            // FILTER -> FILTER(5), F-ENV(6)
-            categoryModules[1] = { 5, 6 };
-            // AMP -> AMP(7), A-ENV(8)
-            categoryModules[2] = { 7, 8 };
-            // M/FX -> LFO1(9), LFO2(10), FX(11)
-            categoryModules[3] = { 9, 10, 11 };
-            // MAIN -> CTRL(12), LIB(13)
-            categoryModules[4] = { 12, 13 };
+            // CHIP -> OSC(0)
+            categoryModules[0] = { 0 };
+            // FILTER -> FILTER(1)
+            categoryModules[1] = { 1 };
+            // AMP -> AMP(2), A-ENV(3)
+            categoryModules[2] = { 2, 3 };
+            // M/FX -> LFO1(4), LFO2(5), FX(6)
+            categoryModules[3] = { 4, 5, 6 };
+            // MAIN -> CTRL(7), LIB(8)
+            categoryModules[4] = { 7, 8 };
 
             setActiveCategory (0);
             categoryButtons[0]->setToggleState (true, juce::dontSendNotification);
@@ -175,7 +177,7 @@ namespace neon
             for (int i = 0; i < 8; ++i)
                 categoryButtons[i]->setBounds (i * slotWidth, 0, slotWidth, (int) unitH);
 
-            int bottomY = (int)(unitH * 9);
+            int bottomY = (int) (unitH * 9);
             for (int i = 0; i < 8; ++i)
                 moduleButtons[i]->setBounds (i * slotWidth, bottomY, slotWidth, (int) unitH);
         }
@@ -231,13 +233,13 @@ namespace neon
         juce::String getModuleName (int index)
         {
             const char* names[] = {
-                "ALGO", "OP 1", "OP 2", "OP 3", "OP 4",   // FM (0-4)
-                "FILTER", "F-ENV",                            // FILTER (5-6)
-                "AMP", "A-ENV",                              // AMP (7-8)
-                "LFO 1", "LFO 2", "FX",                     // M/FX (9-11)
-                "CTRL", "LIB"                                // MAIN (12-13)
+                "CHIP OSC",                             // 0
+                "FILTER",                               // 1
+                "AMP", "A-ENV",                         // 2-3
+                "LFO 1", "LFO 2", "FX",                // 4-6
+                "CTRL", "LIB"                           // 7-8
             };
-            if (index >= 0 && index < 14) return names[index];
+            if (index >= 0 && index < 9) return names[index];
             return "???";
         }
     };
@@ -245,87 +247,73 @@ namespace neon
     // ============================================================
     // Editor implementation
     // ============================================================
-    NeonFmAudioProcessorEditor::NeonFmAudioProcessorEditor (NeonFmAudioProcessor& p)
+    NeonChipAudioProcessorEditor::NeonChipAudioProcessorEditor (NeonChipAudioProcessor& p)
         : AudioProcessorEditor (&p), audioProcessor (p)
     {
         setLookAndFeel (&lookAndFeel);
 
         auto theme = NeonRegistry::getTheme();
 
-        // Use custom FM selection panel
-        auto* fmPanel = new FmSelectionPanel();
-        selectionPanelComponent.reset (fmPanel);
+        // Selection panel
+        auto* chipPanel = new ChipSelectionPanel();
+        selectionPanelComponent.reset (chipPanel);
         addAndMakeVisible (selectionPanelComponent.get());
 
         // === Create all modules ===
 
-        // 0: Algorithm selector
-        auto algo = std::make_unique<FmAlgorithmModule> ("Algorithm", theme.oscillator);
+        // 0: Chip oscillator (custom module)
+        auto chipOsc = std::make_unique<ChipOscModule> ("Chip Osc", theme.oscillator);
 
-        // 1-4: Operators
-        auto op1 = std::make_unique<FmOperatorModule> ("Op 1", juce::Colour (0xFF00DDFF), 0);  // Cyan
-        auto op2 = std::make_unique<FmOperatorModule> ("Op 2", juce::Colour (0xFF00FF88), 1);  // Green
-        auto op3 = std::make_unique<FmOperatorModule> ("Op 3", juce::Colour (0xFFFFAA00), 2);  // Amber
-        auto op4 = std::make_unique<FmOperatorModule> ("Op 4", juce::Colour (0xFFFF4488), 3);  // Pink
+        // 1: Filter (custom chip filter module)
+        auto filter = std::make_unique<ChipFilterModule> ("Filter", theme.filter);
 
-        // 5: Filter
-        auto filter = std::make_unique<FmFilterModule> ("Filter", theme.filter);
+        // 2: Amp
+        auto amp = std::make_unique<AmpModule> ("Amp", theme.amplifier);
 
-        // 6: Filter Envelope
-        auto filterEnv = std::make_unique<FmFilterEnvModule> ("Filter Env", theme.filter);
-
-        // 7: Amp
-        auto amp = std::make_unique<AmpModule> ("Amp Output", theme.amplifier);
-
-        // 8: Amp Envelope
+        // 3: Amp Envelope
         auto envAmp = std::make_unique<DahdsrModule> ("Amp Env", theme.envelope, false);
 
-        // 9-10: LFOs
+        // 4-5: LFOs
         auto lfo1 = std::make_unique<LfoModule> ("LFO 1", theme.modulation);
         auto lfo2 = std::make_unique<LfoModule> ("LFO 2", theme.modulation);
 
-        // 11: FX
+        // 6: FX
         auto fxModule = std::make_unique<FxModule> ("FX", theme.effects);
 
-        // 12: Control
+        // 7: Control
         auto ctrlModule = std::make_unique<ControlModule> ("Control", theme.indicator);
 
-        // 13: Librarian
+        // 8: Librarian
         auto libModule = std::make_unique<LibrarianModule> ("Librarian", theme.background.brighter());
 
-        // Add all modules
-        modules.add (std::move (algo));       // 0 - ALGO
-        modules.add (std::move (op1));        // 1 - OP1
-        modules.add (std::move (op2));        // 2 - OP2
-        modules.add (std::move (op3));        // 3 - OP3
-        modules.add (std::move (op4));        // 4 - OP4
-        modules.add (std::move (filter));     // 5 - FILTER
-        modules.add (std::move (filterEnv));  // 6 - F-ENV
-        modules.add (std::move (amp));        // 7 - AMP
-        modules.add (std::move (envAmp));     // 8 - A-ENV
-        modules.add (std::move (lfo1));       // 9 - LFO1
-        modules.add (std::move (lfo2));       // 10 - LFO2
-        modules.add (std::move (fxModule));   // 11 - FX
-        modules.add (std::move (ctrlModule)); // 12 - CTRL
-        modules.add (std::move (libModule));  // 13 - LIB
+        // Add modules
+        modules.add (std::move (chipOsc));     // 0 - CHIP OSC
+        modules.add (std::move (filter));      // 1 - FILTER
+        modules.add (std::move (amp));         // 2 - AMP
+        modules.add (std::move (envAmp));      // 3 - A-ENV
+        modules.add (std::move (lfo1));        // 4 - LFO1
+        modules.add (std::move (lfo2));        // 5 - LFO2
+        modules.add (std::move (fxModule));    // 6 - FX
+        modules.add (std::move (ctrlModule));  // 7 - CTRL
+        modules.add (std::move (libModule));   // 8 - LIB
 
         for (auto* m : modules)
             addChildComponent (m);
 
-        fmPanel->onModuleChanged = [this] (int index) { setActiveModule (index); };
+        chipPanel->onModuleChanged = [this] (int index) { setActiveModule (index); };
 
-        setActiveModule (0); // Default to Algorithm view
+        setActiveModule (0);  // Default to Chip Osc view
         setSize (940, 840);
         startTimerHz (30);
     }
 
-    NeonFmAudioProcessorEditor::~NeonFmAudioProcessorEditor()
+    NeonChipAudioProcessorEditor::~NeonChipAudioProcessorEditor()
     {
         stopTimer();
         setLookAndFeel (nullptr);
     }
 
-    void NeonFmAudioProcessorEditor::timerCallback()
+    void NeonChipAudioProcessorEditor::timerCallback()
     {
         bool midiIsActive = audioProcessor.midiActivity.exchange (false);
         int activeVoices = audioProcessor.getSignalPath().getActiveVoicesCount();
@@ -343,25 +331,25 @@ namespace neon
         }
     }
 
-    void NeonFmAudioProcessorEditor::setActiveModule (int index)
+    void NeonChipAudioProcessorEditor::setActiveModule (int index)
     {
         if (index < 0 || index >= modules.size()) return;
 
         for (int i = 0; i < modules.size(); ++i)
             modules[i]->setVisible (i == index);
 
-        if (auto* fmPanel = dynamic_cast<FmSelectionPanel*> (selectionPanelComponent.get()))
-            fmPanel->selectModuleByIndex (index, false);
+        if (auto* chipPanel = dynamic_cast<ChipSelectionPanel*> (selectionPanelComponent.get()))
+            chipPanel->selectModuleByIndex (index, false);
 
         resized();
     }
 
-    void NeonFmAudioProcessorEditor::paint (juce::Graphics& g)
+    void NeonChipAudioProcessorEditor::paint (juce::Graphics& g)
     {
         g.fillAll (Colors::background);
     }
 
-    void NeonFmAudioProcessorEditor::resized()
+    void NeonChipAudioProcessorEditor::resized()
     {
         auto bounds = getLocalBounds();
 

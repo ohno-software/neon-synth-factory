@@ -6,9 +6,9 @@ param(
     [string]$Name
 )
 
-$workspaceRoot = "d:/l/neon-synth-factory"
-$templatePath = "$workspaceRoot/neon-template"
-$newProjectPath = "$workspaceRoot/$Name"
+$workspaceRoot = $PSScriptRoot
+$templatePath = Join-Path $workspaceRoot "neon-template"
+$newProjectPath = Join-Path $workspaceRoot $Name
 
 # Validate template exists
 if (-not (Test-Path $templatePath)) {

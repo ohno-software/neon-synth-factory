@@ -77,7 +77,7 @@ namespace neon
             categoryButtons[3]->setButtonText ("M/FX");
             categoryButtons[4]->setButtonText ("MAIN");
             
-            // Setup category mappings: category index -> array of module indices
+            // Default category mappings: category index -> array of module indices
             // OSC -> OSC(0), SUB(1), NOISE(2), P-ENV(3)
             categoryModules[0] = {0, 1, 2, 3};
             // FILTER -> FILTER(4), F-ENV(5)
@@ -89,10 +89,27 @@ namespace neon
             // MAIN -> CTRL(13), ARP(14), LIB(15)
             categoryModules[4] = {13, 14, 15};
             
+            // Default names
+            moduleNames = {
+                "OSC", "SUB", "NOISE", "P-ENV", "FILTER", "F-ENV", "AMP", "A-ENV",
+                "LFO 1", "LFO 2", "MOD", "M-ENV", "FX", "CTRL", "ARP", "LIB"
+            };
+
             // Default to MAIN category
             setActiveCategory (4);
             categoryButtons[4]->setToggleState (true, juce::dontSendNotification);
             updateButtonColors();
+        }
+
+        void setCategoryModules (int categoryIndex, std::vector<int> modules)
+        {
+            if (categoryIndex >= 0 && categoryIndex < 5)
+                categoryModules[categoryIndex] = modules;
+        }
+
+        void setModuleNames (std::vector<juce::String> names)
+        {
+            moduleNames = names;
         }
 
         void setActiveCategory (int categoryIndex)
@@ -245,15 +262,12 @@ namespace neon
         
         int currentCategory = 4; // Default to MAIN
         std::map<int, std::vector<int>> categoryModules; // category index -> module indices
+        std::vector<juce::String> moduleNames;
         int currentModuleIndices[8] = {-1, -1, -1, -1, -1, -1, -1, -1};
         
         juce::String getModuleName (int index)
         {
-            const char* names[] = {
-                "OSC", "SUB", "NOISE", "P-ENV", "FILTER", "F-ENV", "AMP", "A-ENV",
-                "LFO 1", "LFO 2", "MOD", "M-ENV", "FX", "CTRL", "ARP", "LIB"
-            };
-            if (index >= 0 && index < 16) return names[index];
+            if (index >= 0 && index < (int)moduleNames.size()) return moduleNames[index];
             return "???";
         }
     };
