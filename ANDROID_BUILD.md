@@ -2,6 +2,8 @@
 
 This guide explains how to build Neon Jr for Android devices, including setup for GitHub Actions CI/CD and local development.
 
+> Platform note: iOS/iPadOS targets are Standalone + AUv3. VST3 is desktop-only and not an iOS plugin format.
+
 ## Samsung Galaxy A9 Compatibility
 
 Neon Jr is configured to build for ARM64 devices (arm64-v8a), which includes the Samsung Galaxy A9 and most modern Android devices.

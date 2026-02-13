@@ -2,6 +2,17 @@
 
 A centralized environment for the development and automated building of Neon-series synthesizers.
 
+## Core Architecture Contract (Mandatory)
+- UI controls update a centralized parameter state (parameter table/object via JUCE parameters).
+- DSP/signal flow reads from that parameter state while processing audio.
+- Direct control-to-signal-flow mutation is prohibited.
+
+## Platform Targets
+- **Windows/macOS desktop**: VST3 + Standalone.
+- **Android**: Standalone (APK via AndroidStudio target).
+- **iOS/iPadOS**: Standalone + AUv3.
+- **Note**: VST3 is not an iOS plugin format.
+
 ## Quick Start
 To build the factory default synth (`neon-jr`):
 ```powershell

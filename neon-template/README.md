@@ -6,6 +6,15 @@ A GUI template for future synthesizers based on the Neon look and feel.
 
 This template provides a standardized interface layout that can be used as a starting point for new Neon Audio synth projects. It demonstrates the look, feel, and UI structure without implementing any audio processing.
 
+## Critical Architecture Rule
+Every synth created from this template must follow:
+
+`Controls/UI -> Central Parameter State (JUCE parameters) -> Signal Flow/DSP`
+
+- Controls modify parameter state only.
+- DSP reads parameter values during processing.
+- Do not wire controls directly to DSP internals or routing logic.
+
 ## Interface Layout
 
 ### Top Buttons (1-8)

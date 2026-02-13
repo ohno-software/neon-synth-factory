@@ -18,6 +18,8 @@ namespace neon
 
         auto theme = NeonRegistry::getTheme();
 
+        selectionPanel.setCategoryNames ({ "OSC", "FILTER", "AMP", "M/FX", "MAIN" });
+        selectionPanel.setButtonColors (juce::Colour (0xFFFF00FF), juce::Colour (0xFF808080));
         addAndMakeVisible (selectionPanel);
         
         std::vector<juce::String> fmRatios = {"0.5", "1.0", "1.5", "2.0", "3.0", "4.0", "5.0", "6.0", "7.0", "8.0", "9.0", "10.0", "11.0", "12.0", "14.0", "16.0"};

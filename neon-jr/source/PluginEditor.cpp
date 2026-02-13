@@ -18,6 +18,18 @@ namespace neon
 
         auto theme = NeonRegistry::getTheme();
 
+        selectionPanel.setCategoryNames ({ "OSC", "FILTER", "AMP", "M/FX", "MAIN" });
+        selectionPanel.setButtonColors (juce::Colour (0xFFFF00FF), juce::Colour (0xFF808080));
+        selectionPanel.setModuleNames ({
+            "OSC", "SUB", "NOISE", "P-ENV", "FILTER", "F-ENV", "AMP", "A-ENV",
+            "LFO 1", "LFO 2", "MOD", "M-ENV", "FX", "CTRL", "ARP", "LIB"
+        });
+        selectionPanel.setCategoryModules (0, { 0, 1, 2, 3 });
+        selectionPanel.setCategoryModules (1, { 4, 5 });
+        selectionPanel.setCategoryModules (2, { 6, 7 });
+        selectionPanel.setCategoryModules (3, { 8, 9, 10, 11, 12 });
+        selectionPanel.setCategoryModules (4, { 13, 14, 15 });
+
         addAndMakeVisible (selectionPanel);
         
         // Modules

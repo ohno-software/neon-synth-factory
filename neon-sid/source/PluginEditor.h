@@ -21,7 +21,7 @@ namespace neon
         NeonSidAudioProcessor& audioProcessor;
 
         LookAndFeel lookAndFeel;
-        std::unique_ptr<juce::Component> selectionPanelComponent;
+        ModuleSelectionPanel selectionPanel;
 
         juce::OwnedArray<ModuleBase> modules;
         int activeModuleIndex = -1;

@@ -107,6 +107,24 @@ namespace neon
                 categoryModules[categoryIndex] = modules;
         }
 
+        void setCategoryNames (std::vector<juce::String> names)
+        {
+            categoryNames = std::move (names);
+            for (int i = 0; i < 5; ++i)
+            {
+                if (i < (int) categoryNames.size())
+                    categoryButtons[i]->setButtonText (categoryNames[(size_t) i]);
+            }
+            repaint();
+        }
+
+        void setButtonColors (juce::Colour activeText, juce::Colour inactiveText)
+        {
+            activeTextColor = activeText;
+            inactiveTextColor = inactiveText;
+            updateButtonColors();
+        }
+
         void setModuleNames (std::vector<juce::String> names)
         {
             moduleNames = names;
@@ -216,23 +234,20 @@ namespace neon
         
         void updateButtonColors()
         {
-            auto magenta = juce::Colour (0xFFFF00FF); // Bright magenta
-            auto grey = juce::Colour (0xFF808080); // Grey for unselected
-            
             // Update category button colors
             for (auto* btn : categoryButtons)
             {
                 if (btn->getToggleState())
                 {
                     btn->setColour (juce::TextButton::buttonColourId, juce::Colours::white.withAlpha (0.95f));
-                    btn->setColour (juce::TextButton::textColourOnId, magenta);
-                    btn->setColour (juce::TextButton::textColourOffId, magenta);
+                    btn->setColour (juce::TextButton::textColourOnId, activeTextColor);
+                    btn->setColour (juce::TextButton::textColourOffId, activeTextColor);
                 }
                 else
                 {
                     btn->setColour (juce::TextButton::buttonColourId, juce::Colours::transparentBlack);
-                    btn->setColour (juce::TextButton::textColourOnId, grey);
-                    btn->setColour (juce::TextButton::textColourOffId, grey);
+                    btn->setColour (juce::TextButton::textColourOnId, inactiveTextColor);
+                    btn->setColour (juce::TextButton::textColourOffId, inactiveTextColor);
                 }
                 btn->repaint();
             }
@@ -243,14 +258,14 @@ namespace neon
                 if (btn->getToggleState())
                 {
                     btn->setColour (juce::TextButton::buttonColourId, juce::Colours::white.withAlpha (0.95f));
-                    btn->setColour (juce::TextButton::textColourOnId, magenta);
-                    btn->setColour (juce::TextButton::textColourOffId, magenta);
+                    btn->setColour (juce::TextButton::textColourOnId, activeTextColor);
+                    btn->setColour (juce::TextButton::textColourOffId, activeTextColor);
                 }
                 else
                 {
                     btn->setColour (juce::TextButton::buttonColourId, juce::Colours::transparentBlack);
-                    btn->setColour (juce::TextButton::textColourOnId, grey);
-                    btn->setColour (juce::TextButton::textColourOffId, grey);
+                    btn->setColour (juce::TextButton::textColourOnId, inactiveTextColor);
+                    btn->setColour (juce::TextButton::textColourOffId, inactiveTextColor);
                 }
                 btn->repaint();
             }
@@ -262,8 +277,11 @@ namespace neon
         
         int currentCategory = 4; // Default to MAIN
         std::map<int, std::vector<int>> categoryModules; // category index -> module indices
+        std::vector<juce::String> categoryNames = {"OSC", "FILTER", "AMP", "M/FX", "MAIN"};
         std::vector<juce::String> moduleNames;
         int currentModuleIndices[8] = {-1, -1, -1, -1, -1, -1, -1, -1};
+        juce::Colour activeTextColor { juce::Colour (0xFFFF00FF) };
+        juce::Colour inactiveTextColor { juce::Colour (0xFF808080) };
         
         juce::String getModuleName (int index)
         {

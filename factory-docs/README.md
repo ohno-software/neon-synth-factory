@@ -5,7 +5,7 @@ This folder contains the official documentation for the Neon Synth Factory ecosy
 ### Table of Contents
 
 1.  **[Introduction](01_introduction.md)**
-    *   Mission Statement
+    *   [Mission Statement](../MISSION_STATEMENT.md)
     *   Core Projects Overview
 2.  **[Unified Build System](02_build_system.md)**
     *   Using `build.ps1`

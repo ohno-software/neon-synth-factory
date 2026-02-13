@@ -1,0 +1,76 @@
+name: Build iOS (Standalone + AUv3)
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-ios:
+    name: iOS build (${{ matrix.synth }})
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        synth: [neon-jr, neon-fm, neon-chip, neon-split, neon-777, neon-sid]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Fetch JUCE
+        run: |
+          git clone --depth 1 https://github.com/juce-framework/JUCE.git JUCE
+
+      - name: Configure iOS project (Xcode)
+        run: |
+          cmake -S ./${{ matrix.synth }} -B ./build-ios/${{ matrix.synth }} \
+            -G Xcode \
+            -DCMAKE_SYSTEM_NAME=iOS \
+            -DCMAKE_OSX_ARCHITECTURES=arm64 \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=14.0
+
+      - name: Build iOS targets
+        run: |
+          cmake --build ./build-ios/${{ matrix.synth }} --config Release
+
+      - name: Package iOS artifacts
+        shell: bash
+        run: |
+          set -e
+          mkdir -p out/${{ matrix.synth }}
+          find ./build-ios/${{ matrix.synth }} -type d \( -name "*.app" -o -name "*.appex" -o -name "*.audiounit" \) -print0 | while IFS= read -r -d '' p; do
+            cp -R "$p" out/${{ matrix.synth }}/
+          done
+
+      - name: Upload iOS artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.synth }}-iOS
+          path: out/${{ matrix.synth }}/
+
+  release:
+    name: Attach iOS artifacts
+    needs: build-ios
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+
+      - name: Create release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            neon-jr-iOS/**/*
+            neon-fm-iOS/**/*
+            neon-chip-iOS/**/*
+            neon-split-iOS/**/*
+            neon-777-iOS/**/*
+            neon-sid-iOS/**/*
+          draft: false
+          prerelease: true
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

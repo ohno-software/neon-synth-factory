@@ -25,7 +25,7 @@ namespace neon
         LookAndFeel lookAndFeel;
 
         NeonDebugPanel debugPanel;
-        std::unique_ptr<juce::Component> selectionPanelComponent;
+        ModuleSelectionPanel selectionPanel;
         juce::OwnedArray<ModuleBase> modules;
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (NeonFmAudioProcessorEditor)

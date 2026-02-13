@@ -5,6 +5,9 @@ Welcome to the **Neon Synth Factory**, a centralized ecosystem for developing hi
 ## The Vision
 The factory serves as a laboratory where multiple "Neon" synthesizer variations can be developed in parallel while sharing a common UI and DSP foundation. By treating each synthesizer as a module within the larger factory, we ensure consistency and efficiency.
 
+## Core Architecture Directive
+Across all synths, controls update a central parameter state, and the DSP signal path reads from that state during processing. UI controls do not directly manipulate DSP internals or signal routing.
+
 ## Core Projects
 *   **[neon-jr](../neon-jr)**: The core reference synth. Stable, reliable, and the blueprint for the factory standards.
 *   **[neon-components](../neon-components)**: The central library of UI elements and themes shared across all factory synths.

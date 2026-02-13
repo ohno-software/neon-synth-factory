@@ -27,7 +27,7 @@ juce_add_plugin(NeonTemplate
     NEEDS_MIDI_OUTPUT FALSE
     IS_MIDI_EFFECT FALSE
     EDITOR_RESIZABLE TRUE
-    FORMATS VST3 Standalone
+    FORMATS VST3 AUv3 Standalone AndroidStudio
     STANDALONE_MENU_BAR TRUE
     PRODUCT_NAME "Neon Template"
 )
