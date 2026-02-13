@@ -29,7 +29,7 @@ namespace neon
                         onModuleChanged (categoryModules[catIndex][0]);
                 };
                 addAndMakeVisible (btn.get());
-                categoryButtons.add (std::move (btn));
+                categoryButtons.add (btn.release());
             }
 
             // Bottom row: Module buttons
@@ -53,7 +53,7 @@ namespace neon
                     }
                 };
                 addChildComponent (btn.get());
-                moduleButtons.add (std::move (btn));
+                moduleButtons.add (btn.release());
             }
 
             categoryButtons[0]->setButtonText ("SID");

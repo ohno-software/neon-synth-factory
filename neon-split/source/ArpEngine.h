@@ -1,6 +1,7 @@
 #pragma once
 
 #include <JuceHeader.h>
+#include <vector>
 #include "VoiceBase.h"
 #include "SyncDelay.h"
 #include "Reverb.h"

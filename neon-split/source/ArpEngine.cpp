@@ -1,5 +1,6 @@
 #include "ArpEngine.h"
 #include <algorithm>
+#include <cmath>
 
 //==============================================================================
 ArpEngine::ArpEngine()
@@ -314,7 +315,7 @@ void ArpEngine::setFilterCutoff(float hz)
 {
     filterCutoff = juce::jlimit(20.0f, 20000.0f, hz);
     float q = resonanceEnabled ? 1.2f : 0.7071f; // Slight resonance bump if enabled
-    *filter.coefficients = *juce::dsp::IIR::Coefficients<float>::makeLowPass(sampleRate, filterCutoff, q);
+    filter.coefficients = juce::dsp::IIR::Coefficients<float>::makeLowPass(sampleRate, filterCutoff, q);
 }
 
 void ArpEngine::setResonanceEnabled(bool enabled)

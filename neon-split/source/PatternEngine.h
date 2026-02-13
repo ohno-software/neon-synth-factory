@@ -1,6 +1,8 @@
 #pragma once
 
 #include <JuceHeader.h>
+#include <array>
+#include <vector>
 
 /**
  * Pattern Engine - Handles bass and arp patterns with tempo sync

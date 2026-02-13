@@ -1,6 +1,7 @@
 #pragma once
 
 #include <JuceHeader.h>
+#include <array>
 #include "VoiceBase.h"
 #include "HighPassFilter.h"
 #include "SyncDelay.h"

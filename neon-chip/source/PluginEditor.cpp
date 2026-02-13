@@ -44,7 +44,7 @@ namespace neon
                     addChildComponent (btn.get());
                 }
 
-                categoryButtons.add (std::move (btn));
+                categoryButtons.add (btn.release());
             }
 
             // Bottom row: 8 slots for module buttons
@@ -68,7 +68,7 @@ namespace neon
                     }
                 };
                 addChildComponent (btn.get());
-                moduleButtons.add (std::move (btn));
+                moduleButtons.add (btn.release());
             }
 
             // Category names
