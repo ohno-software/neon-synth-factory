@@ -78,14 +78,14 @@ namespace neon
 
             // FM -> ALGO(0), OP1(1), OP2(2), OP3(3), OP4(4)
             categoryModules[0] = { 0, 1, 2, 3, 4 };
-            // FILTER -> FILTER(5)
-            categoryModules[1] = { 5 };
-            // AMP -> AMP(6), A-ENV(7)
-            categoryModules[2] = { 6, 7 };
-            // M/FX -> LFO1(8), LFO2(9), FX(10)
-            categoryModules[3] = { 8, 9, 10 };
-            // MAIN -> CTRL(11), LIB(12)
-            categoryModules[4] = { 11, 12 };
+            // FILTER -> FILTER(5), F-ENV(6)
+            categoryModules[1] = { 5, 6 };
+            // AMP -> AMP(7), A-ENV(8)
+            categoryModules[2] = { 7, 8 };
+            // M/FX -> LFO1(9), LFO2(10), FX(11)
+            categoryModules[3] = { 9, 10, 11 };
+            // MAIN -> CTRL(12), LIB(13)
+            categoryModules[4] = { 12, 13 };
 
             setActiveCategory (0);
             categoryButtons[0]->setToggleState (true, juce::dontSendNotification);
@@ -232,12 +232,12 @@ namespace neon
         {
             const char* names[] = {
                 "ALGO", "OP 1", "OP 2", "OP 3", "OP 4",   // FM (0-4)
-                "FILTER",                                     // FILTER (5)
-                "AMP", "A-ENV",                              // AMP (6-7)
-                "LFO 1", "LFO 2", "FX",                     // M/FX (8-10)
-                "CTRL", "LIB"                                // MAIN (11-12)
+                "FILTER", "F-ENV",                            // FILTER (5-6)
+                "AMP", "A-ENV",                              // AMP (7-8)
+                "LFO 1", "LFO 2", "FX",                     // M/FX (9-11)
+                "CTRL", "LIB"                                // MAIN (12-13)
             };
-            if (index >= 0 && index < 13) return names[index];
+            if (index >= 0 && index < 14) return names[index];
             return "???";
         }
     };
@@ -271,39 +271,43 @@ namespace neon
         // 5: Filter
         auto filter = std::make_unique<FmFilterModule> ("Filter", theme.filter);
 
-        // 6: Amp
+        // 6: Filter Envelope
+        auto filterEnv = std::make_unique<FmFilterEnvModule> ("Filter Env", theme.filter);
+
+        // 7: Amp
         auto amp = std::make_unique<AmpModule> ("Amp Output", theme.amplifier);
 
-        // 7: Amp Envelope
+        // 8: Amp Envelope
         auto envAmp = std::make_unique<DahdsrModule> ("Amp Env", theme.envelope, false);
 
-        // 8-9: LFOs
+        // 9-10: LFOs
         auto lfo1 = std::make_unique<LfoModule> ("LFO 1", theme.modulation);
         auto lfo2 = std::make_unique<LfoModule> ("LFO 2", theme.modulation);
 
-        // 10: FX
+        // 11: FX
         auto fxModule = std::make_unique<FxModule> ("FX", theme.effects);
 
-        // 11: Control
+        // 12: Control
         auto ctrlModule = std::make_unique<ControlModule> ("Control", theme.indicator);
 
-        // 12: Librarian
+        // 13: Librarian
         auto libModule = std::make_unique<LibrarianModule> ("Librarian", theme.background.brighter());
 
         // Add all modules
-        modules.add (std::move (algo));       // 0 - ALGO
-        modules.add (std::move (op1));        // 1 - OP1
-        modules.add (std::move (op2));        // 2 - OP2
-        modules.add (std::move (op3));        // 3 - OP3
-        modules.add (std::move (op4));        // 4 - OP4
-        modules.add (std::move (filter));     // 5 - FILTER
-        modules.add (std::move (amp));        // 6 - AMP
-        modules.add (std::move (envAmp));     // 7 - A-ENV
-        modules.add (std::move (lfo1));       // 8 - LFO1
-        modules.add (std::move (lfo2));       // 9 - LFO2
-        modules.add (std::move (fxModule));   // 10 - FX
-        modules.add (std::move (ctrlModule)); // 11 - CTRL
-        modules.add (std::move (libModule));  // 12 - LIB
+        modules.add (algo.release());       // 0 - ALGO
+        modules.add (op1.release());        // 1 - OP1
+        modules.add (op2.release());        // 2 - OP2
+        modules.add (op3.release());        // 3 - OP3
+        modules.add (op4.release());        // 4 - OP4
+        modules.add (filter.release());     // 5 - FILTER
+        modules.add (filterEnv.release());  // 6 - F-ENV
+        modules.add (amp.release());        // 7 - AMP
+        modules.add (envAmp.release());     // 8 - A-ENV
+        modules.add (lfo1.release());       // 9 - LFO1
+        modules.add (lfo2.release());       // 10 - LFO2
+        modules.add (fxModule.release());   // 11 - FX
+        modules.add (ctrlModule.release()); // 12 - CTRL
+        modules.add (libModule.release());  // 13 - LIB
 
         for (auto* m : modules)
             addChildComponent (m);

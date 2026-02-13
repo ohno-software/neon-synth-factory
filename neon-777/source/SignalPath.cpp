@@ -1,0 +1,1085 @@
+#include "SignalPath.h"
+#include "ModulationTargets.h"
+#include <cmath>
+#include <algorithm>
+#include <random>
+
+namespace neon
+{
+    // Fast rational approximation for tanh (CPU Mitigation)
+    inline float fastTanh (float x)
+    {
+        if (x < -3.0f) return -1.0f;
+        if (x > 3.0f) return 1.0f;
+        float x2 = x * x;
+        return x * (27.0f + x2) / (27.0f + 9.0f * x2);
+    }
+
+    SignalPath::SignalPath() : registry (ParameterRegistry::getInstance())
+    {
+        std::vector<juce::String> names = {"0.5", "1", "1.5", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "14", "16"};
+        NeonRegistry::setWaveformNames (names);
+    }
+
+    void SignalPath::prepareToPlay (int samplesPerBlockExpected, double sr)
+    {
+        sampleRate = sr;
+        samplesPerBlock = samplesPerBlockExpected;
+        tempBuffer.setSize (2, samplesPerBlockExpected);
+        
+        juce::dsp::ProcessSpec spec;
+        spec.sampleRate = sr;
+        spec.maximumBlockSize = (juce::uint32)samplesPerBlockExpected;
+        spec.numChannels = 2;
+        
+        chorus.prepare (spec);
+        phaser.prepare (spec);
+        reverb.prepare (spec);
+        delay.prepare (spec);
+
+        for (auto& v : voices)
+        {
+            v.filter1.prepare (spec);
+            v.filter2.prepare (spec);
+            v.ampEnv.setSampleRate (sr);
+            v.filterEnv.setSampleRate (sr);
+            v.pitchEnv.setSampleRate (sr);
+            v.modEnv.setSampleRate (sr);
+        }
+    }
+
+    void SignalPath::releaseResources() {}
+
+    void SignalPath::noteOn (int midiNote, float velocity)
+    {
+        if (arpSettings.enabled)
+        {
+            if (arpSettings.latch)
+            {
+                if (arpState.physicalKeysDown == 0)
+                    arpState.heldNotes.clear();
+            }
+            arpState.physicalKeysDown++;
+
+            arpState.heldNotes.push_back (midiNote);
+            std::sort (arpState.heldNotes.begin(), arpState.heldNotes.end());
+            arpState.heldNotes.erase (std::unique (arpState.heldNotes.begin(), arpState.heldNotes.end()), arpState.heldNotes.end());
+            updateArpSequence();
+
+            // If Arp is doing something, we don't trigger notes here manually 
+            // unless we want some complex "Arp + Lead" mode. Let's stick to pure Arp for now.
+            if (arpState.sequence.size() > 0)
+                return;
+        }
+
+        // Mono Mode: Kill other voices and track held notes
+        if (isMonoMode)
+        {
+            // Add to held notes list
+            monoHeldNotes.push_back (midiNote);
+            
+            for (auto& v : voices)
+            {
+                if (v.isActive)
+                {
+                    v.ampEnv.noteOff();
+                    v.filterEnv.noteOff();
+                    v.pitchEnv.noteOff();
+                    v.modEnv.noteOff();
+                }
+            }
+        }
+
+        // 1. Find a voice to use (including voice stealing)
+        Voice* voiceToUse = nullptr;
+        double oldestNoteTime = std::numeric_limits<double>::max();
+        Voice* oldestVoice = nullptr;
+
+        for (auto& v : voices)
+        {
+            if (!v.isActive.load() || (v.midiNote == midiNote && v.ampEnv.isActive()))
+            {
+                voiceToUse = &v;
+                break;
+            }
+            if (v.noteOnTime < oldestNoteTime)
+            {
+                oldestNoteTime = v.noteOnTime;
+                oldestVoice = &v;
+            }
+        }
+
+        if (voiceToUse == nullptr)
+            voiceToUse = oldestVoice;
+
+        if (voiceToUse != nullptr)
+        {
+            voiceToUse->reset();
+            voiceToUse->midiNote = midiNote;
+            voiceToUse->velocity = velocity;
+            voiceToUse->isActive.store (true);
+            voiceToUse->noteOnTime = juce::Time::getMillisecondCounterHiRes();
+            voiceToUse->decimationCounter = juce::Random::getSystemRandom().nextInt (8);
+            voiceToUse->noiseState = 0x12345678 + (uint32_t)(midiNote * 997) + (uint32_t)(velocity * 100000);
+
+            float freq = (float)juce::MidiMessage::getMidiNoteInHertz (midiNote);
+            voiceToUse->targetFrequency = freq;
+            
+            // Portamento: if enabled and we have a previous note, start glide from that frequency
+            if (portaOn && lastMonoNote >= 0 && lastMonoNote != midiNote)
+            {
+                voiceToUse->currentGlideFreq = currentPortaFreq;
+            }
+            else
+            {
+                voiceToUse->currentGlideFreq = freq;
+            }
+            
+            // Update global portamento state
+            currentPortaFreq = freq;
+            lastMonoNote = midiNote;
+            
+            voiceToUse->osc1.currentFrequency = freq;
+            voiceToUse->osc2.currentFrequency = freq;
+            
+            if (globalOsc1.keySync) {
+                for (int i = 0; i < 4; ++i) {
+                    voiceToUse->osc1.carrierPhases[i] = globalOsc1.phaseStart;
+                    voiceToUse->osc1.modulatorPhases[i] = globalOsc1.phaseStart;
+                }
+            }
+            if (globalOsc2.keySync) {
+                for (int i = 0; i < 4; ++i) {
+                    voiceToUse->osc2.carrierPhases[i] = globalOsc2.phaseStart;
+                    voiceToUse->osc2.modulatorPhases[i] = globalOsc2.phaseStart;
+                }
+            }
+
+            // LFOs KeySync
+            for (int i = 0; i < 2; ++i)
+            {
+                if (globalLfos[i].keySync)
+                    voiceToUse->lfos[i].reset (globalLfos[i].phaseStart, voiceToUse->noteOnTime);
+                else
+                    voiceToUse->lfos[i].noteOnTime = voiceToUse->noteOnTime;
+            }
+
+            // Apply global params initially
+            voiceToUse->ampEnv.setParameters (ampParams);
+            voiceToUse->filterEnv.setParameters (filterParams);
+            voiceToUse->pitchEnv.setParameters (pitchParams);
+            voiceToUse->modEnv.setParameters (modParams);
+
+            voiceToUse->ampEnv.noteOn();
+            voiceToUse->filterEnv.noteOn();
+            voiceToUse->pitchEnv.noteOn();
+            voiceToUse->modEnv.noteOn();
+        }
+    }
+
+    void SignalPath::setPolyAftertouch (int midiNote, float value)
+    {
+        for (auto& v : voices)
+        {
+            if (v.isActive && v.midiNote == midiNote)
+                v.aftertouch = value;
+        }
+    }
+
+    void SignalPath::setChannelAftertouch (float value)
+    {
+        for (auto& v : voices)
+        {
+            if (v.isActive)
+                v.aftertouch = value;
+        }
+    }
+
+    void SignalPath::noteOff (int midiNote)
+    {
+        if (arpSettings.enabled)
+        {
+            arpState.physicalKeysDown = std::max (0, arpState.physicalKeysDown - 1);
+
+            if (!arpSettings.latch)
+            {
+                arpState.heldNotes.erase (std::remove (arpState.heldNotes.begin(), arpState.heldNotes.end(), midiNote), arpState.heldNotes.end());
+                updateArpSequence();
+            }
+
+            if (arpState.sequence.size() > 0)
+                return;
+        }
+
+        for (auto& v : voices)
+        {
+            if (v.isActive && v.midiNote == midiNote)
+            {
+                v.ampEnv.noteOff();
+                v.filterEnv.noteOff();
+                v.pitchEnv.noteOff();
+                v.modEnv.noteOff();
+            }
+        }
+        
+        // If Mono, remove from held notes and retrigger previous note if any remain
+        if (isMonoMode)
+        {
+            monoHeldNotes.erase (std::remove (monoHeldNotes.begin(), monoHeldNotes.end(), midiNote), monoHeldNotes.end());
+            if (!monoHeldNotes.empty())
+            {
+                noteOn (monoHeldNotes.back(), 0.8f);
+            }
+        }
+    }
+
+    void SignalPath::updateParams()
+    {
+        auto getVal = [this] (const juce::String& path, float fallback = 0.0f) {
+            if (auto* p = registry.getParameter (path))
+                return p->getValue();
+            return fallback;
+        };
+
+        auto updateGlobalOsc = [&](FMOscState& state, const juce::String& name) {
+            state.fmRatioIdx = (int)getVal (name + "/Ratio", 3.0f); // Default to 1.0 if idx 3 is 1.0
+            state.fmIndex    = getVal (name + "/Depth", 0.0f);
+            state.detune   = getVal (name + "/Detune", 0.0f);
+            state.transp   = getVal (name + "/Octave", 0.0f) * 12.0f;
+            state.phaseStart = getVal (name + "/Phase", 0.0f) / 360.0f;
+            state.keySync    = getVal (name + "/KeySync", 1.0f) > 0.5f;
+            state.volume   = getVal (name + "/Volume", 0.8f);
+            state.pan      = getVal (name + "/Pan", 0.0f);
+            state.unison   = (int)juce::jlimit(1.0f, 4.0f, getVal (name + "/Unison", 1.0f));
+            state.uSpread  = getVal (name + "/USpread", 0.2f);
+            
+            // Jr legacy support
+            state.drive    = getVal (name + "/Drive", 0.0f);
+            state.bitRedux = getVal (name + "/BitRedux", 0.0f);
+            state.fold     = getVal (name + "/Fold", 0.0f);
+        };
+
+        updateGlobalOsc (globalOsc1, "Oscillator 1");
+        updateGlobalOsc (globalOsc2, "Oscillator 2");
+        
+        // Sub Osc
+        globalSubLevel = getVal ("Sub Osc/Volume", 0.0f);
+        int octaveChoice = (int)getVal ("Sub Osc/Octave", 1.0f);
+        if (octaveChoice == 0) globalSubOctave = -2.0f;
+        else if (octaveChoice == 1) globalSubOctave = -1.0f;
+        else globalSubOctave = -0.5f;
+        
+        // Noise
+        globalNoiseVolume = getVal ("Noise/Volume", 0.0f);
+
+        // LFOs
+        auto updateGlobalLfo = [&](LfoSettings& settings, const juce::String& name) {
+            settings.shape = (int)std::round (getVal (name + "/Shape", 0.0f));
+            settings.syncMode = getVal (name + "/Sync", 0.0f) > 0.5f;
+            settings.rateHz = getVal (name + "/Rate Hz", 1.0f) * 5.0f; // Compensate for skew
+            settings.rateNoteIdx = (int)std::round (getVal (name + "/Rate Note", 4.0f));
+            settings.keySync = getVal (name + "/KeySync", 1.0f) > 0.5f;
+            settings.phaseStart = getVal (name + "/Phase", 0.0f) / 360.0f;
+            settings.delayMs = getVal (name + "/Delay", 0.0f);
+            settings.fadeMs = getVal (name + "/Fade", 0.0f); // NEW
+            
+            for (int i = 0; i < 4; ++i)
+            {
+                settings.slots[i].target = getVal (name + "/Slot " + juce::String (i + 1) + " Target", 0.0f);
+                settings.slots[i].amount = getVal (name + "/Slot " + juce::String (i + 1) + " Amount", 0.0f);
+            }
+        };
+
+        updateGlobalLfo (globalLfos[0], "LFO 1");
+        updateGlobalLfo (globalLfos[1], "LFO 2");
+
+        // Filter
+        filterType = (int)getVal ("Ladder Filter/Type", 0.0f);
+        baseFilterCutoff = getVal ("Ladder Filter/Cutoff", 20000.0f);
+        baseFilterRes = getVal ("Ladder Filter/Res", 0.0f);
+        baseFilterDrive = getVal ("Ladder Filter/Drive", 1.0f);
+        filterKeyTrack = getVal ("Ladder Filter/KeyTrack", 0.5f);
+        filterIs24dB = getVal ("Ladder Filter/Slope", 1.0f) > 0.5f;
+        filterVelocity = getVal ("Ladder Filter/Velocity", 0.0f); // NEW
+        filterAftertouch = getVal ("Ladder Filter/Aftertouch", 0.0f); // NEW
+
+        // Env - Update ADSR from DAHDSR params
+        auto getEnvParams = [&] (const juce::String& mod) {
+            float sustain = getVal (mod + "/Sustain", 0.7f);
+            // Fix: Ensure sustain is never exactly 0 to preserve release behavior
+            if (sustain < 0.001f) sustain = 0.001f;
+            
+            return juce::ADSR::Parameters({
+                getVal (mod + "/Attack", 10.0f) / 1000.0f,
+                getVal (mod + "/Decay", 500.0f) / 1000.0f,
+                sustain,
+                getVal (mod + "/Release", 500.0f) / 1000.0f
+            });
+        };
+
+        ampParams = getEnvParams ("Amp Env");
+        filterParams = getEnvParams ("Filter Env");
+        pitchParams = getEnvParams ("Pitch Env");
+        modParams = getEnvParams ("Mod Env");
+
+        filterEnvAmount = getVal ("Filter Env/Amount", 0.0f);
+        filterEnvTarget = (int)getVal ("Filter Env/Target", 2.0f); // NEW
+        filterEnvVelocity = getVal ("Filter Env/V.Amount", 0.0f); // NEW
+        filterEnvAftertouch = getVal ("Filter Env/AT.Amount", 0.0f); // NEW
+        filterEnvVelAttack = getVal ("Filter Env/V.Attack", 0.0f); // NEW
+        
+        pitchEnvAmount = getVal ("Pitch Env/Amount", 0.0f);
+        pitchEnvTarget = (int)getVal ("Pitch Env/Target", 2.0f); // NEW
+        pitchEnvVelocity = getVal ("Pitch Env/V.Amount", 0.0f); // NEW
+        pitchEnvAftertouch = getVal ("Pitch Env/AT.Amount", 0.0f); // NEW
+        pitchEnvVelAttack = getVal ("Pitch Env/V.Attack", 0.0f); // NEW
+        
+        for (int i = 0; i < 4; ++i)
+        {
+            auto prefix = "Mod Env/Slot " + juce::String (i + 1);
+            modSlots[i].target = getVal (prefix + " Target", 0.0f);
+            modSlots[i].amount = getVal (prefix + " Amount", 0.0f);
+        }
+
+        for (int i = 0; i < 16; ++i) // Expanded from 8 to 16
+        {
+            auto prefix = "Mod/Slot " + juce::String (i + 1);
+            ctrlSlots[i].target = getVal (prefix + " Target", 0.0f);
+            ctrlSlots[i].amount = getVal (prefix + " Amount", 0.0f);
+            // Source removed - Mod Env is implicit source
+        }
+
+        pbRange = getVal ("Control/PB Range", 2.0f);
+        isMonoMode = (int)getVal ("Control/Mode", 0.0f) == 1;
+
+        internalBpm = getVal ("Control/Tempo", 120.0f);
+        useHostBpm = getVal ("Control/Tempo Sync", 1.0f) > 0.5f;
+
+        if (!useHostBpm)
+            bpm = internalBpm;
+
+        ampLevel = getVal ("Amp Output/Level", 0.8f);
+        ampVelocity = getVal ("Amp Output/Velocity", 0.5f);
+        ampAftertouch = getVal ("Amp Output/Aftertouch", 0.0f); // NEW
+        
+        // NEW: Portamento
+        portaOn = getVal ("Control/Porta On", 0.0f) > 0.5f;
+        portaTime = getVal ("Control/Porta Time", 100.0f);
+        portaMode = getVal ("Control/Porta Mode", 0.0f) > 0.5f;
+
+        // Arp
+        bool wasArpEnabled = arpSettings.enabled;
+        arpSettings.enabled = getVal ("Arp/Arp On", 0.0f) > 0.5f;
+
+        if (wasArpEnabled && !arpSettings.enabled)
+        {
+            // Turn off all arp-triggered notes
+            if (arpState.activeNote != -1)
+            {
+                for (auto& v : voices) if (v.isActive && v.midiNote == arpState.activeNote) v.ampEnv.noteOff();
+            }
+            arpState.reset();
+        }
+
+        arpSettings.rateNoteIdx = (int)getVal ("Arp/Rate Note", 2.0f);
+        arpSettings.mode = (int)getVal ("Arp/Mode", 0.0f);
+        arpSettings.octaves = (int)getVal ("Arp/Octave", 1.0f);
+        arpSettings.gate = getVal ("Arp/Gate", 80.0f) / 100.0f;
+        
+        bool newLatch = getVal ("Arp/Latch", 0.0f) > 0.5f;
+        if (arpSettings.latch && !newLatch && arpState.physicalKeysDown == 0)
+        {
+            arpState.heldNotes.clear();
+            updateArpSequence();
+        }
+        arpSettings.latch = newLatch;
+
+        // FX
+        fxSettings.modType = (int)getVal ("FX/Mod Type", 1.0f);
+        fxSettings.modRate = getVal ("FX/Mod Rate", 1.0f);
+        fxSettings.modDepth = getVal ("FX/Mod Depth", 0.5f);
+        fxSettings.modFeedback = getVal ("FX/Mod Feedback", 0.0f); // NEW
+        fxSettings.modMix = getVal ("FX/Mod Mix", 0.0f);
+
+        fxSettings.dlyTime = getVal ("FX/Dly Time", 400.0f);
+        fxSettings.dlyNoteIdx = (int)std::round (getVal ("FX/Dly Note", 4.0f)); // NEW
+        fxSettings.dlyFeedback = getVal ("FX/Dly FB", 0.3f);
+        fxSettings.dlyMix = getVal ("FX/Dly Mix", 0.0f);
+        fxSettings.dlySync = getVal ("FX/Dly Sync", 0.0f) > 0.5f;
+
+        fxSettings.rvbTime = getVal ("FX/Rvb Time", 2.0f); // NEW
+        fxSettings.rvbSize = getVal ("FX/Rvb Size", 0.5f);
+        fxSettings.rvbDamp = getVal ("FX/Rvb Damp", 0.5f);
+        fxSettings.rvbPredelay = getVal ("FX/Rvb Predelay", 0.0f); // NEW
+        fxSettings.rvbMix = getVal ("FX/Rvb Mix", 0.0f);
+
+        // Update DSP parameters
+        chorus.setRate (fxSettings.modRate);
+        chorus.setDepth (fxSettings.modDepth);
+        chorus.setFeedback (fxSettings.modFeedback); // NEW
+        chorus.setCentreDelay (fxSettings.modType == 3 ? 7.0f : 20.0f); // Flanger uses shorter delay
+        chorus.setMix (fxSettings.modType == 2 ? 0.0f : fxSettings.modMix); // Phaser uses its own mix
+
+        phaser.setRate (fxSettings.modRate);
+        phaser.setDepth (fxSettings.modDepth);
+        phaser.setFeedback (fxSettings.modFeedback); // NEW
+        phaser.setMix (fxSettings.modType == 2 ? fxSettings.modMix : 0.0f);
+
+        delay.feedback = fxSettings.dlyFeedback;
+        delay.mix = fxSettings.dlyMix;
+        float actualDlyTime = fxSettings.dlyTime;
+        if (fxSettings.dlySync) {
+            // Use note divisions for tempo-synced delay
+            static constexpr float divs[] = { 0.0625f, 0.125f, 0.25f, 0.5f, 1.0f, 2.0f, 4.0f, 8.0f, 16.0f };
+            int idx = juce::jlimit (0, 8, fxSettings.dlyNoteIdx);
+            double beatsPerSec = bpm / 60.0;
+            double secPerBeat = 1.0 / beatsPerSec;
+            actualDlyTime = (float)(secPerBeat * divs[idx] * 1000.0); // Convert to ms
+        }
+        delay.line.setDelay (actualDlyTime * (float)sampleRate / 1000.0f);
+
+        juce::dsp::Reverb::Parameters rvbParams;
+        rvbParams.roomSize = juce::jmap (fxSettings.rvbTime, 0.0f, 10.0f, 0.0f, 1.0f); // Map time to room size
+        rvbParams.damping = fxSettings.rvbDamp;
+        rvbParams.width = 1.0f; // Use full stereo width
+        rvbParams.wetLevel = fxSettings.rvbMix;
+        rvbParams.dryLevel = 1.0f - (fxSettings.rvbMix * 0.5f);
+        reverb.setParameters (rvbParams);
+        // Note: Predelay would require a separate delay line, skipping for now
+        
+        // Push most critical per-block global params to active voices
+        // (Envelopes are updated in noteOn or if we want real-time parameter changes we do it here)
+        for (auto& v : voices)
+        {
+            if (v.isActive)
+            {
+                v.ampEnv.setParameters (ampParams);
+                v.filterEnv.setParameters (filterParams);
+                v.pitchEnv.setParameters (pitchParams);
+                v.modEnv.setParameters (modParams);
+                
+                auto type = juce::dsp::StateVariableTPTFilterType::lowpass;
+                if (filterType == 1) type = juce::dsp::StateVariableTPTFilterType::highpass;
+                else if (filterType == 2) type = juce::dsp::StateVariableTPTFilterType::bandpass;
+
+                v.filter1.setType (type);
+                v.filter2.setType (type);
+                
+                // Set resonance (Q)
+                float resonanceQ = 0.707f + (baseFilterRes * 10.0f);
+                v.filter1.setResonance (resonanceQ);
+                v.filter2.setResonance (resonanceQ);
+            }
+        }
+    }
+
+    float SignalPath::renderOscSample (float& carrierPhase, float& modulatorPhase, float actualFreq, const FMOscState& state)
+    {
+        if (actualFreq <= 0.01f) return 0.0f;
+
+        // Ratio logic: Quantized steps
+        static constexpr float ratios[] = { 0.5f, 1.0f, 1.5f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f, 7.0f, 8.0f, 9.0f, 10.0f, 11.0f, 12.0f, 14.0f, 16.0f };
+        int numRatios = 16;
+        int ratioIdx = juce::jlimit(0, numRatios - 1, state.fmRatioIdx);
+        float ratio = ratios[ratioIdx];
+
+        float index = state.fmIndex * 8.0f; // Max index 8.0 for rich FM
+
+        double carrierInc = (double)actualFreq / sampleRate;
+        double modulatorInc = ((double)actualFreq * (double)ratio) / sampleRate;
+
+        // Render Sine Modulator
+        float modVal = std::sin (modulatorPhase * juce::MathConstants<float>::twoPi);
+        modulatorPhase += (float)modulatorInc;
+        if (modulatorPhase >= 1.0f) modulatorPhase -= 1.0f;
+
+        // Render Modulated Carrier
+        // Standard FM: Carrier = sin(pC + index * Modulator)
+        float val = std::sin ((carrierPhase + modVal * index) * juce::MathConstants<float>::twoPi);
+        
+        carrierPhase += (float)carrierInc;
+        if (carrierPhase >= 1.0f) carrierPhase -= 1.0f;
+
+        // Apply legacy drive if any
+        if (state.drive > 0.01f)
+            val = fastTanh (val * (1.0f + state.drive * 4.0f));
+
+        return val * state.volume;
+    }
+
+    float calculateLfo (SignalPath::LfoState& state, const SignalPath::LfoSettings& settings, double sr, double bpm)
+    {
+        if (sr <= 0.0) return 0.0f;
+
+        // Apply Delay
+        double elapsedMs = 0.0;
+        if (state.noteOnTime > 0)
+            elapsedMs = juce::Time::getMillisecondCounterHiRes() - state.noteOnTime;
+        
+        if (settings.delayMs > 0.01f && elapsedMs < (double)settings.delayMs)
+            return 0.0f;
+
+        double rateHz = settings.rateHz;
+        if (settings.syncMode)
+        {
+            // Note sync rates: 1/64, 1/32, 1/16, 1/8, 1/4, 1/2, 1/1, 2/1, 4/1
+            static constexpr double divs[] = { 
+                0.0625, 0.125, 0.25, 0.5, 1.0, 2.0, 4.0, 8.0, 16.0 
+            };
+            int idx = juce::jlimit (0, 8, settings.rateNoteIdx);
+            double beatsPerSec = bpm / 60.0;
+            // rate = cycles per second. 1 cycle = 'div' beats.
+            // so rateHz = beatsPerSec / div
+            rateHz = beatsPerSec / divs[idx];
+        }
+
+        double phaseInc = rateHz / sr;
+        float out = 0.0f;
+        float phase = state.phase;
+
+        switch (settings.shape)
+        {
+            case 0: // Triangle
+                out = (phase < 0.5f) ? (phase * 4.0f - 1.0f) : (3.0f - phase * 4.0f);
+                break;
+            case 1: // Ramp Up
+                out = phase * 2.0f - 1.0f;
+                break;
+            case 2: // Ramp Down
+                out = 1.0f - phase * 2.0f;
+                break;
+            case 3: // Square
+                out = (phase < 0.5f) ? 1.0f : -1.0f;
+                break;
+            case 4: // S&H
+                if (phase < phaseInc || !state.sampleHoldTriggered)
+                {
+                    state.lastOutput = (juce::Random::getSystemRandom().nextFloat() * 2.0f - 1.0f);
+                    state.sampleHoldTriggered = true;
+                }
+                out = state.lastOutput;
+                break;
+        }
+
+        state.phase += (float)phaseInc;
+        if (state.phase >= 1.0f) 
+        {
+            state.phase -= 1.0f;
+            state.sampleHoldTriggered = false; // Reset trigger on wrap
+        }
+        
+        // NEW: Apply Fade envelope
+        if (settings.fadeMs > 0.01f && state.noteOnTime > 0)
+        {
+            double fadeElapsed = elapsedMs - (double)settings.delayMs; // Fade starts after delay
+            if (fadeElapsed < (double)settings.fadeMs)
+            {
+                float fadeGain = (float)(fadeElapsed / (double)settings.fadeMs);
+                out *= juce::jlimit (0.0f, 1.0f, fadeGain);
+            }
+        }
+        
+        return out;
+    }
+
+    void SignalPath::getNextAudioBlock (const juce::AudioSourceChannelInfo& bufferToFill)
+    {
+        bufferToFill.clearActiveBufferRegion();
+        updateParams();
+        
+        int numSamples = bufferToFill.numSamples;
+        handleArp (numSamples);
+        
+        auto* mainOutL = bufferToFill.buffer->getWritePointer (0, bufferToFill.startSample);
+        auto* mainOutR = bufferToFill.buffer->getWritePointer (1, bufferToFill.startSample);
+
+        // Constant power pan helpers
+        auto getL = [] (float pan) { return std::cos ((pan + 1.0f) * (juce::MathConstants<float>::pi * 0.25f)); };
+        auto getR = [] (float pan) { return std::sin ((pan + 1.0f) * (juce::MathConstants<float>::pi * 0.25f)); };
+
+        for (auto& v : voices)
+        {
+            if (!v.isActive.load()) continue;
+
+            // Voice-specific buffers
+            tempBuffer.clear();
+            auto* vL = tempBuffer.getWritePointer(0);
+            auto* vR = tempBuffer.getWritePointer(1);
+
+            float midInOctaves = std::log2 (juce::jlimit(20.0f, (float)sampleRate * 0.45f, baseFilterCutoff) / 20.0f);
+            float kTrackOctaves = ((v.midiNote - 60.0f) / 12.0f) * filterKeyTrack;
+            
+            for (int s = 0; s < numSamples; ++s)
+            {
+                float envA = v.ampEnv.getNextSample();
+                float envF = v.filterEnv.getNextSample(); 
+                float envP = v.pitchEnv.getNextSample();
+                float rawMod = v.modEnv.getNextSample();
+
+                float pbShift = pitchWheel * pbRange; // Apply Pitch Bend Range
+
+                // Voice lifecycle: stay active as long as the Amp or Filter envelopes are running
+                if (envA < 0.00001f && !v.ampEnv.isActive() && !v.filterEnv.isActive())
+                {
+                    v.isActive.store (false);
+                    break;
+                }
+                
+                // Optimized Modulation: Only update mod matrix every 8 samples
+                if (v.decimationCounter++ % 8 == 0)
+                {
+                    v.mOsc1Pitch = pbShift; v.mOsc2Pitch = pbShift;
+                    v.mOsc1FM = 0; v.mOsc2FM = 0;
+                    v.mOsc1Sym = 0; v.mOsc1Fold = 0; v.mOsc1Drive = 0; v.mOsc1Bit = 0; v.mOsc1Lvl = 0; v.mOsc1Pan = 0;
+                    v.mOsc2Sym = 0; v.mOsc2Fold = 0; v.mOsc2Drive = 0; v.mOsc2Bit = 0; v.mOsc2Lvl = 0; v.mOsc2Pan = 0;
+                    v.mOsc1Det = 0; v.mOsc2Det = 0;
+                    v.mSubLevel = 0; v.mSubPitch = 0;
+                    v.mFiltCut = 0; v.mFiltRes = 0;
+                    
+                    for (int i = 0; i < 2; ++i)
+                        for (int j = 0; j < 4; ++j)
+                            v.mLfoAmts[i][j] = 0.0f;
+
+                    auto applyMod = [&](float target, float amount) {
+                        if (!std::isfinite(amount)) return;
+                        switch (static_cast<ModTarget>(std::round(target)))
+                        {
+                            case ModTarget::Osc1Pitch:    v.mOsc1Pitch += amount * 12.0f; break; 
+                            case ModTarget::Osc1FM:       v.mOsc1FM    += amount; break;
+                            case ModTarget::Osc1Symmetry: v.mOsc1Sym   += amount; break;
+                            case ModTarget::Osc1Fold:     v.mOsc1Fold  += amount; break;
+                            case ModTarget::Osc1Drive:    v.mOsc1Drive += amount; break;
+                            case ModTarget::Osc1BitRedux: v.mOsc1Bit   += amount; break;
+                            case ModTarget::Osc1Level:    v.mOsc1Lvl   += amount; break;
+                            case ModTarget::Osc1Pan:      v.mOsc1Pan   += amount; break;
+                            case ModTarget::Osc1Detune:   v.mOsc1Det   += amount * 100.0f; break; 
+
+                            case ModTarget::Osc2Pitch:    v.mOsc2Pitch += amount * 12.0f; break; 
+                            case ModTarget::Osc2FM:       v.mOsc2FM    += amount; break;
+                            case ModTarget::Osc2Symmetry: v.mOsc2Sym   += amount; break;
+                            case ModTarget::Osc2Fold:     v.mOsc2Fold  += amount; break;
+                            case ModTarget::Osc2Drive:    v.mOsc2Drive += amount; break;
+                            case ModTarget::Osc2BitRedux: v.mOsc2Bit   += amount; break;
+                            case ModTarget::Osc2Level:    v.mOsc2Lvl   += amount; break;
+                            case ModTarget::Osc2Pan:      v.mOsc2Pan   += amount; break;
+                            case ModTarget::Osc2Detune:   v.mOsc2Det   += amount * 100.0f; break;
+                            
+                            case ModTarget::SubLevel:     v.mSubLevel  += amount; break;
+                            case ModTarget::SubPitch:     v.mSubPitch  += amount * 12.0f; break;
+                            
+                            case ModTarget::FilterCutoff: v.mFiltCut   += amount; break;
+                            case ModTarget::FilterRes:    v.mFiltRes   += amount; break;
+
+                            case ModTarget::Lfo1Amount1: v.mLfoAmts[0][0] += amount; break;
+                            case ModTarget::Lfo1Amount2: v.mLfoAmts[0][1] += amount; break;
+                            case ModTarget::Lfo1Amount3: v.mLfoAmts[0][2] += amount; break;
+                            case ModTarget::Lfo1Amount4: v.mLfoAmts[0][3] += amount; break;
+                            case ModTarget::Lfo2Amount1: v.mLfoAmts[1][0] += amount; break;
+                            case ModTarget::Lfo2Amount2: v.mLfoAmts[1][1] += amount; break;
+                            case ModTarget::Lfo2Amount3: v.mLfoAmts[1][2] += amount; break;
+                            case ModTarget::Lfo2Amount4: v.mLfoAmts[1][3] += amount; break;
+
+                            default: break;
+                        }
+                    };
+
+                    // Mod Env Matrix
+                    for (int i = 0; i < 4; ++i)
+                        applyMod (modSlots[i].target, rawMod * (modSlots[i].amount / 100.0f));
+
+                    // Control Matrix (Expanded to 16 slots, using Mod Env as source)
+                    for (int i = 0; i < 16; ++i)
+                        applyMod (ctrlSlots[i].target, rawMod * (ctrlSlots[i].amount / 100.0f));
+
+                    // LFO Matrix
+                    for (int l = 0; l < 2; ++l)
+                    {
+                        float lfoVal = calculateLfo (v.lfos[l], globalLfos[l], (float)sampleRate, bpm);
+                        for (int i = 0; i < 4; ++i)
+                        {
+                            float modifiedAmount = (globalLfos[l].slots[i].amount / 100.0f) + v.mLfoAmts[l][i];
+                            applyMod (globalLfos[l].slots[i].target, lfoVal * modifiedAmount);
+                        }
+                    }
+                }
+
+                // Portamento: Interpolate frequency towards target
+                if (portaOn && v.currentGlideFreq != v.targetFrequency)
+                {
+                    float glideSpeed = portaTime; // in milliseconds
+                    if (glideSpeed < 1.0f) glideSpeed = 1.0f;
+                    
+                    // Calculate glide rate per sample
+                    float glideSamples = (glideSpeed / 1000.0f) * (float)sampleRate;
+                    float glideRate = 1.0f / glideSamples;
+                    
+                    // Linear interpolation towards target
+                    float diff = v.targetFrequency - v.currentGlideFreq;
+                    v.currentGlideFreq += diff * glideRate;
+                    
+                    // Snap to target if very close
+                    if (std::abs(diff) < 0.01f)
+                        v.currentGlideFreq = v.targetFrequency;
+                    
+                    // Update oscillator frequencies with glided value
+                    v.osc1.currentFrequency = v.currentGlideFreq;
+                    v.osc2.currentFrequency = v.currentGlideFreq;
+                }
+
+                // 1. Oscillators with Unison
+                auto renderUnison = [&](FMOscState& gState, float& vFreq, float* vCarrierPhases, float* vModPhases, float* uFreqsCache, float* uGainsLCache, float* uGainsRCache, float pitchEnv, float modDetune, float& rowL, float& rowR, int sIndex) {
+                    int count = juce::jlimit(1, 4, gState.unison);
+                    float sL = 0, sR = 0;
+                    
+                    if (sIndex % 8 == 0)
+                    {
+                        // Scale pitch envelope amount by velocity and aftertouch
+                        float scaledPitchEnvAmt = pitchEnvAmount * (1.0f + v.velocity * pitchEnvVelocity + v.aftertouch * pitchEnvAftertouch);
+                        float envShift = pitchEnv * (scaledPitchEnvAmt * 24.0f);
+                        float pitchMult = std::pow(2.0f, envShift / 12.0f);
+                        float baseFrequency = vFreq * pitchMult;
+                        float norm = 1.0f / std::sqrt((float)count);
+
+                        for (int i = 0; i < count; ++i)
+                        {
+                            float spreadOffset = (count > 1) ? (float)i / (float)(count - 1) * 2.0f - 1.0f : 0.0f;
+                            float totalDetune = (gState.transp * 100.0f) + gState.detune + modDetune + (gState.uSpread * 50.0f * spreadOffset);
+                            uFreqsCache[i] = baseFrequency * std::pow(2.0f, totalDetune / 1200.0f);
+                            
+                            float uPan = juce::jlimit(-1.0f, 1.0f, gState.pan + (spreadOffset * gState.uSpread));
+                            uGainsLCache[i] = std::sqrt((1.0f - uPan) * 0.5f) * norm;
+                            uGainsRCache[i] = std::sqrt((1.0f + uPan) * 0.5f) * norm;
+                        }
+                    }
+
+                    for (int i = 0; i < count; ++i)
+                    {
+                        float samp = renderOscSample(vCarrierPhases[i], vModPhases[i], uFreqsCache[i], gState);
+                        sL += samp * uGainsLCache[i];
+                        sR += samp * uGainsRCache[i];
+                    }
+                    rowL = sL;
+                    rowR = sR;
+                };
+
+                FMOscState tOsc1 = globalOsc1;
+                tOsc1.fmIndex  = juce::jlimit(0.0f, 1.0f, tOsc1.fmIndex + v.mOsc1FM);
+                tOsc1.volume   = juce::jlimit(0.0f, 1.0f, tOsc1.volume + v.mOsc1Lvl);
+                tOsc1.pan      = juce::jlimit(-1.0f, 1.0f, tOsc1.pan + v.mOsc1Pan);
+                tOsc1.drive    = juce::jlimit(0.0f, 1.0f, tOsc1.drive + v.mOsc1Drive);
+
+                float osc1SumL = 0, osc1SumR = 0;
+                renderUnison(tOsc1, v.osc1.currentFrequency, v.osc1.carrierPhases, v.osc1.modulatorPhases, v.u1Freqs, v.u1GainsL, v.u1GainsR, envP, v.mOsc1Det + (v.mOsc1Pitch * 100.0f), osc1SumL, osc1SumR, s);
+
+                FMOscState tOsc2 = globalOsc2;
+                tOsc2.fmIndex  = juce::jlimit(0.0f, 1.0f, tOsc2.fmIndex + v.mOsc2FM);
+                tOsc2.volume   = juce::jlimit(0.0f, 1.0f, tOsc2.volume + v.mOsc2Lvl);
+                tOsc2.pan      = juce::jlimit(-1.0f, 1.0f, tOsc2.pan + v.mOsc2Pan);
+                tOsc2.drive    = juce::jlimit(0.0f, 1.0f, tOsc2.drive + v.mOsc2Drive);
+                
+                float osc2SumL = 0, osc2SumR = 0;
+                renderUnison(tOsc2, v.osc2.currentFrequency, v.osc2.carrierPhases, v.osc2.modulatorPhases, v.u2Freqs, v.u2GainsL, v.u2GainsR, envP, v.mOsc2Det + (v.mOsc2Pitch * 100.0f), osc2SumL, osc2SumR, s);
+
+                // 1b. Sub Oscillator (VA Square Wave)
+                float subSumL = 0.0f, subSumR = 0.0f;
+                float effectiveSubLevel = juce::jlimit(0.0f, 1.0f, globalSubLevel + v.mSubLevel);
+                if (effectiveSubLevel > 0.0001f)
+                {
+                    float subFreq = v.osc1.currentFrequency * std::pow(2.0f, globalSubOctave + (v.mSubPitch / 12.0f));
+                    float subInc = subFreq / (float)sampleRate;
+                    
+                    // Standard Pulse/Square wave implementation
+                    float subSample = (v.subPhase < 0.5f) ? 1.0f : -1.0f;
+                    subSample *= effectiveSubLevel;
+                    
+                    v.subPhase += subInc;
+                    if (v.subPhase >= 1.0f) v.subPhase -= 1.0f;
+                    
+                    subSumL = subSample;
+                    subSumR = subSample;
+                }
+
+                // 1c. Fast Noise Generation (XORshift32 - ultra-cheap)
+                float noiseSamp = 0.0f;
+                if (globalNoiseVolume > 0.0001f)
+                {
+                    v.noiseState ^= v.noiseState << 13;
+                    v.noiseState ^= v.noiseState >> 17;
+                    v.noiseState ^= v.noiseState << 5;
+                    noiseSamp = (float)(int)v.noiseState * (1.0f / 2147483648.0f) * globalNoiseVolume;
+                }
+
+                float sampL = (osc1SumL + osc2SumL + subSumL + noiseSamp) * 0.33f;
+                float sampR = (osc1SumR + osc2SumR + subSumR + noiseSamp) * 0.33f;
+
+                float driveGain = 1.0f + (baseFilterDrive - 1.0f) * 3.0f; // Aggressive gain multiplier
+
+                // 2. Filter (State Variable Filter - Optimized)
+                // We only update coefficients every 8 samples to save massive CPU
+                if ((v.decimationCounter - 1) % 8 == 0)
+                {
+                    // NEW: Add velocity and aftertouch modulation to filter cutoff
+                    float velocityMod = (v.velocity - 0.5f) * 2.0f * filterVelocity * 3.0f; // ±3 octaves max
+                    float aftertouchMod = v.aftertouch * filterAftertouch * 3.0f; // +3 octaves max
+                    
+                    // NEW: Scale filter envelope amount by velocity and aftertouch
+                    float scaledFilterEnvAmt = filterEnvAmount * (1.0f + v.velocity * filterEnvVelocity + v.aftertouch * filterEnvAftertouch);
+                    
+                    // Filter modulation: The envF value should be used to affect the filter cutoff
+                    // Make sure we're properly scaling it with the amount parameter and applying it as a modulator
+                    float filterModAmount = envF * scaledFilterEnvAmt;
+                    
+                    float totalOctaves = midInOctaves + kTrackOctaves + (filterModAmount / 10.0f) + (v.mFiltCut * 5.0f) + velocityMod + aftertouchMod;
+                    float modulatedHz = 20.0f * std::pow (2.0f, totalOctaves);
+                    modulatedHz = juce::jlimit (20.0f, (float)sampleRate * 0.45f, modulatedHz);
+
+                    if (std::isfinite (modulatedHz))
+                    {
+                        v.filter1.setCutoffFrequency (modulatedHz);
+                        
+                        // Resonance modulation (mapped to SVF Q)
+                        float currentRes = juce::jlimit(0.0f, 1.0f, baseFilterRes + v.mFiltRes);
+                        float q = 0.707f + (currentRes * 15.0f);
+                        v.filter1.setResonance (q); 
+                        
+                        if (filterIs24dB)
+                        {
+                            v.filter2.setCutoffFrequency (modulatedHz);
+                            v.filter2.setResonance (q);
+                        }
+                    }
+                }
+
+                // Apply pre-filter drive for harmonic saturation
+                sampL *= driveGain;
+                sampR *= driveGain;
+
+                sampL = v.filter1.processSample (0, sampL);
+                sampR = v.filter1.processSample (1, sampR);
+                
+                // Intermediate non-linear stage (Aggressive!)
+                if (baseFilterDrive > 1.1f)
+                {
+                    sampL = fastTanh (sampL);
+                    sampR = fastTanh (sampR);
+                }
+
+                if (filterIs24dB)
+                {
+                    sampL = v.filter2.processSample (0, sampL);
+                    sampR = v.filter2.processSample (1, sampR);
+
+                    if (baseFilterDrive > 1.1f)
+                    {
+                        sampL = fastTanh (sampL);
+                        sampR = fastTanh (sampR);
+                    }
+                }
+
+                // 3. Final Amp & Sum
+                // NEW: Apply amp velocity and aftertouch modulation
+                float velocityGain = 1.0f + (v.velocity - 1.0f) * ampVelocity; // Scale by velocity sensitivity
+                float aftertouchGain = 1.0f + v.aftertouch * ampAftertouch; // Add aftertouch boost
+                float ampGain = envA * velocityGain * aftertouchGain * ampLevel;
+                vL[s] = sampL * ampGain;
+                vR[s] = sampR * ampGain;
+            }
+
+            for (int s = 0; s < numSamples; ++s)
+            {
+                mainOutL[s] += vL[s];
+                mainOutR[s] += vR[s];
+            }
+        }
+
+        // Apply Global Effects
+        juce::dsp::AudioBlock<float> block (*bufferToFill.buffer);
+        juce::dsp::ProcessContextReplacing<float> context (block);
+
+        if (fxSettings.modType == 1 || fxSettings.modType == 3)
+            chorus.process (context);
+        else if (fxSettings.modType == 2)
+            phaser.process (context);
+
+        if (fxSettings.dlyMix > 0.01f)
+            delay.process (context);
+
+        if (fxSettings.rvbMix > 0.01f)
+            reverb.process (context);
+    }
+
+    void SignalPath::DelayBlock::process (juce::dsp::ProcessContextReplacing<float>& context)
+    {
+        auto& block = context.getOutputBlock();
+        auto* chL = block.getChannelPointer(0);
+        auto* chR = block.getChannelPointer(1);
+        int numSamples = (int)block.getNumSamples();
+
+        for (int s = 0; s < numSamples; ++s)
+        {
+            float inL = chL[s];
+            float inR = chR[s];
+
+            float dlyL = line.popSample (0);
+            float dlyR = line.popSample (1);
+
+            line.pushSample (0, inL + dlyL * feedback);
+            line.pushSample (1, inR + dlyR * feedback);
+
+            chL[s] = inL + dlyL * mix;
+            chR[s] = inR + dlyR * mix;
+        }
+    }
+
+    void SignalPath::updateArpSequence()
+    {
+        arpState.sequence.clear();
+        if (arpState.heldNotes.empty())
+        {
+            arpState.sequenceIndex = 0;
+            return;
+        }
+
+        std::vector<int> sorted = arpState.heldNotes;
+        std::sort (sorted.begin(), sorted.end());
+
+        std::vector<int> baseNotes;
+        int octs = (int)std::round (arpSettings.octaves);
+
+        for (int o = 0; o < octs; ++o)
+        {
+            for (int n : sorted)
+            {
+                int note = n + (o * 12);
+                if (note <= 127) baseNotes.push_back (note);
+            }
+        }
+
+        if (arpSettings.mode == 0) // UP
+        {
+            arpState.sequence = baseNotes;
+        }
+        else if (arpSettings.mode == 1) // DOWN
+        {
+            arpState.sequence = baseNotes;
+            std::reverse (arpState.sequence.begin(), arpState.sequence.end());
+        }
+        else if (arpSettings.mode == 2) // UP/DOWN
+        {
+            arpState.sequence = baseNotes;
+            if (baseNotes.size() > 2)
+            {
+                for (int i = (int)baseNotes.size() - 2; i > 0; --i)
+                    arpState.sequence.push_back (baseNotes[i]);
+            }
+        }
+        else if (arpSettings.mode == 3) // RANDOM
+        {
+            arpState.sequence = baseNotes;
+            auto seed = (unsigned int)juce::Time::getMillisecondCounter();
+            std::shuffle (arpState.sequence.begin(), arpState.sequence.end(), std::default_random_engine(seed));
+        }
+
+        if (arpState.sequenceIndex >= (int)arpState.sequence.size())
+            arpState.sequenceIndex = 0;
+    }
+
+    void SignalPath::handleArp (int numSamples)
+    {
+        if (!arpSettings.enabled || arpState.sequence.empty())
+        {
+            if (arpState.activeNote != -1)
+            {
+                for (auto& v : voices) 
+                {
+                    if (v.isActive && v.midiNote == arpState.activeNote)
+                    {
+                        v.ampEnv.noteOff();
+                    }
+                }
+                arpState.activeNote = -1;
+            }
+            return;
+        }
+
+        // Arp is now always tempo synced
+        static constexpr double divs[] = { 0.0625, 0.125, 0.25, 0.5, 1.0, 2.0, 4.0, 8.0, 16.0 };
+        int idx = juce::jlimit (0, 8, arpSettings.rateNoteIdx);
+        double beatsPerSec = bpm / 60.0;
+        double rateHz = beatsPerSec / divs[idx];
+
+        double samplesPerStep = sampleRate / rateHz;
+        double gateSamples = samplesPerStep * arpSettings.gate;
+
+        arpState.timer += numSamples;
+
+        if (arpState.timer >= samplesPerStep)
+        {
+            arpState.timer -= samplesPerStep;
+            
+            if (!arpState.sequence.empty())
+                arpState.sequenceIndex = (arpState.sequenceIndex + 1) % arpState.sequence.size();
+            
+            int nextNote = arpState.sequence[arpState.sequenceIndex];
+            
+            if (arpState.activeNote != -1)
+            {
+                for (auto& v : voices) 
+                {
+                    if (v.isActive && v.midiNote == arpState.activeNote)
+                        v.ampEnv.noteOff();
+                }
+            }
+
+            arpState.activeNote = nextNote;
+            arpState.gateOpen = true;
+
+            Voice* voiceToUse = nullptr;
+            for (auto& v : voices) if (!v.isActive.load()) { voiceToUse = &v; break; }
+            if (!voiceToUse) voiceToUse = &voices[0];
+
+            voiceToUse->reset();
+            voiceToUse->midiNote = nextNote;
+            voiceToUse->velocity = 0.8f;
+            voiceToUse->isActive.store (true);
+            voiceToUse->noteOnTime = juce::Time::getMillisecondCounterHiRes();
+            float freq = (float)juce::MidiMessage::getMidiNoteInHertz (nextNote);
+            voiceToUse->osc1.currentFrequency = freq;
+            voiceToUse->osc2.currentFrequency = freq;
+            
+            if (globalOsc1.keySync) {
+                for (int i = 0; i < 4; ++i) {
+                    voiceToUse->osc1.carrierPhases[i] = globalOsc1.phaseStart;
+                    voiceToUse->osc1.modulatorPhases[i] = globalOsc1.phaseStart;
+                }
+            }
+            if (globalOsc2.keySync) {
+                for (int i = 0; i < 4; ++i) {
+                    voiceToUse->osc2.carrierPhases[i] = globalOsc2.phaseStart;
+                    voiceToUse->osc2.modulatorPhases[i] = globalOsc2.phaseStart;
+                }
+            }
+            
+            voiceToUse->ampEnv.setParameters (ampParams);
+            voiceToUse->ampEnv.noteOn();
+            voiceToUse->filterEnv.setParameters (filterParams);
+            voiceToUse->filterEnv.noteOn();
+            voiceToUse->pitchEnv.setParameters (pitchParams);
+            voiceToUse->pitchEnv.noteOn();
+            voiceToUse->modEnv.setParameters (modParams);
+            voiceToUse->modEnv.noteOn();
+        }
+        else if (arpState.gateOpen && arpState.timer >= gateSamples)
+        {
+            arpState.gateOpen = false;
+            if (arpState.activeNote != -1)
+            {
+                for (auto& v : voices) 
+                {
+                    if (v.isActive && v.midiNote == arpState.activeNote)
+                        v.ampEnv.noteOff();
+                }
+            }
+        }
+    }
+} // namespace neon

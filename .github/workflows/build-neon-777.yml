@@ -1,0 +1,144 @@
+name: Build Neon 777
+
+on:
+  push:
+    branches: [ main ]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform: PC
+          - os: macos-latest
+            platform: Mac
+          - os: ubuntu-latest
+            platform: Android
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Fetch JUCE
+        run: |
+          git clone --depth 1 https://github.com/juce-framework/JUCE.git JUCE
+
+      - name: Setup MSVC (Windows)
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Setup CMake and Ninja
+        uses: lukka/get-cmake@latest
+        with:
+          cmakeVersion: ${{ matrix.platform == 'Android' && '~3.28.0' || 'latest' }}
+
+      - name: Install Linux Dependencies (Android/Ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build \
+            libasound2-dev libcurl4-openssl-dev libfreetype6-dev \
+            libx11-dev libxcomposite-dev libxcursor-dev libxext-dev \
+            libxinerama-dev libxrandr-dev libxrender-dev \
+            libwebkit2gtk-4.1-dev libglu1-mesa-dev mesa-common-dev
+
+      - name: Setup Android NDK (Android)
+        if: matrix.platform == 'Android'
+        uses: nttld/setup-ndk@v1
+        id: setup-ndk
+        with:
+          ndk-version: r26d
+          add-to-path: true
+
+      - name: Set NDK Environment (Android)
+        if: matrix.platform == 'Android'
+        shell: bash
+        run: |
+          echo "ANDROID_NDK_ROOT=${{ steps.setup-ndk.outputs.ndk-path }}" >> $GITHUB_ENV
+          echo "ANDROID_NDK_HOME=${{ steps.setup-ndk.outputs.ndk-path }}" >> $GITHUB_ENV
+
+      - name: Setup Java (Android)
+        if: matrix.platform == 'Android'
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Build Neon 777
+        shell: pwsh
+        run: |
+          if ("${{ matrix.platform }}" -eq "Android") {
+            ./build-android.ps1 -Synth neon-777 -Config Release
+          } else {
+            ./build.ps1 -Synth neon-777 -Config Release
+          }
+
+      - name: Prepare Artifacts
+        shell: pwsh
+        run: |
+          mkdir out
+
+          if ("${{ matrix.platform }}" -eq "PC") {
+              mkdir dist-pc
+              Copy-Item -Path "artifacts/neon-777/Standalone/*.exe" -Destination dist-pc/
+              Copy-Item -Path "artifacts/neon-777/VST3" -Destination dist-pc/ -Recurse
+              if (Test-Path "artifacts/neon-777/waves-1") {
+                  Copy-Item -Path "artifacts/neon-777/waves-1" -Destination dist-pc/ -Recurse
+              }
+              Compress-Archive -Path dist-pc/* -DestinationPath "Neon-777-PC.zip"
+          }
+          elseif ("${{ matrix.platform }}" -eq "Mac") {
+              mkdir dist-mac
+              Copy-Item -Path "artifacts/neon-777/Standalone/Neon 777.app" -Destination dist-mac/ -Recurse
+              Copy-Item -Path "artifacts/neon-777/VST3" -Destination dist-mac/ -Recurse
+              if (Test-Path "artifacts/neon-777/waves-1") {
+                  Copy-Item -Path "artifacts/neon-777/waves-1" -Destination dist-mac/ -Recurse
+              }
+          }
+          elseif ("${{ matrix.platform }}" -eq "Android") {
+              mkdir dist-android
+              if (Test-Path "artifacts/neon-777/Android") {
+                  Copy-Item -Path "artifacts/neon-777/Android/*.apk" -Destination dist-android/ -ErrorAction SilentlyContinue
+              }
+              Compress-Archive -Path dist-android/* -DestinationPath "Neon-777-Android.zip"
+          }
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Neon-777-${{ matrix.platform }}
+          path: |
+            ${{ matrix.platform == 'PC' && 'Neon-777-PC.zip' || '' }}
+            ${{ matrix.platform == 'Mac' && 'dist-mac/' || '' }}
+            ${{ matrix.platform == 'Android' && 'Neon-777-Android.zip' || '' }}
+
+  release:
+    name: Create Alpha Release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            Neon-777-PC/Neon-777-PC.zip
+            Neon-777-Mac/**/*
+            Neon-777-Android/Neon-777-Android.zip
+          draft: false
+          prerelease: true
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

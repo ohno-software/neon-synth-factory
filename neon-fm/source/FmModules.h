@@ -355,6 +355,119 @@ namespace neon
     };
 
     /**
+     * FmFilterEnvModule
+     * Filter envelope module for FM synth.
+     * ADSR envelope that modulates filter cutoff, with bipolar Amount control.
+     */
+    class FmFilterEnvModule : public ModuleBase
+    {
+    public:
+        FmFilterEnvModule (const juce::String& name, const juce::Colour& color)
+            : ModuleBase (name, color)
+        {
+            // Row 1: Attack, Decay, Sustain, Release
+            addParameter ("Attack",  0.0f, 10000.0f, 10.0f);
+            addParameter ("Decay",   0.0f, 10000.0f, 300.0f);
+            addParameter ("Sustain", 0.0f, 1.0f,     0.0f);
+            addParameter ("Release", 0.0f, 10000.0f, 300.0f);
+
+            // Row 2: Amount (bipolar), spacers
+            addParameter ("Amount", -100.0f, 100.0f, 0.0f, false, 0.0f, false, true);
+            addSpacer();
+            addSpacer();
+            addSpacer();
+
+            lastAdjustedIndex = 0;
+        }
+
+    protected:
+        void paintVisualization (juce::Graphics& g, juce::Rectangle<int> area) override
+        {
+            auto r = area.reduced (100, 80).toFloat();
+
+            g.setColour (accentColor.withAlpha (0.05f));
+            g.fillRoundedRectangle (r, 6.0f);
+
+            // Get envelope values (in ms / normalized)
+            float attack  = parameters[0]->getValue();   // ms
+            float decay   = parameters[1]->getValue();    // ms
+            float sustain = parameters[2]->getValue();    // 0-1
+            float release = parameters[3]->getValue();    // ms
+            float amount  = parameters[4]->getValue();    // -100 to 100
+
+            // Normalize to visual widths
+            float totalMs = attack + decay + release + 200.0f; // add sustain hold region
+            float aW = (attack / totalMs) * r.getWidth();
+            float dW = (decay / totalMs) * r.getWidth();
+            float sW = (200.0f / totalMs) * r.getWidth();       // sustain hold region
+            float rW = (release / totalMs) * r.getWidth();
+
+            float top = r.getY() + 10;
+            float bottom = r.getBottom() - 10;
+            float range = bottom - top;
+
+            // Flip visual if amount is negative
+            float peakY = (amount >= 0.0f) ? top : bottom;
+            float sustainY = bottom - sustain * range * (amount >= 0.0f ? 1.0f : -1.0f);
+            float zeroY = (amount >= 0.0f) ? bottom : top;
+
+            if (amount < 0.0f)
+            {
+                peakY = bottom;
+                sustainY = top + sustain * range;
+                zeroY = top;
+            }
+
+            juce::Path envPath;
+            float x = r.getX();
+
+            envPath.startNewSubPath (x, zeroY);
+
+            // Attack: zero to peak
+            x += aW;
+            envPath.lineTo (x, peakY);
+
+            // Decay: peak to sustain
+            x += dW;
+            envPath.lineTo (x, sustainY);
+
+            // Sustain hold
+            x += sW;
+            envPath.lineTo (x, sustainY);
+
+            // Release: sustain to zero
+            x += rW;
+            envPath.lineTo (x, zeroY);
+
+            // Draw fill
+            juce::Path fillPath = envPath;
+            fillPath.lineTo (x, zeroY);
+            fillPath.lineTo (r.getX(), zeroY);
+            fillPath.closeSubPath();
+
+            auto fillColor = accentColor.withAlpha (0.12f);
+            g.setColour (fillColor);
+            g.fillPath (fillPath);
+
+            // Draw stroke
+            auto drawColor = (amount > 0.01f || amount < -0.01f) ? accentColor : accentColor.withAlpha (0.4f);
+            g.setColour (drawColor);
+            g.strokePath (envPath, juce::PathStrokeType (2.5f, juce::PathStrokeType::curved));
+
+            // Draw zero line
+            g.setColour (accentColor.withAlpha (0.15f));
+            float zeroLineY = (amount >= 0.0f) ? bottom : top;
+            g.drawHorizontalLine ((int) zeroLineY, r.getX(), r.getRight());
+
+            // Amount label
+            g.setColour (accentColor.withAlpha (0.5f));
+            g.setFont (14.0f);
+            juce::String amtText = (amount >= 0.0f ? "+" : "") + juce::String ((int) amount) + "%";
+            g.drawText (amtText, r.withHeight (20).withY ((int) r.getY()), juce::Justification::centredRight);
+        }
+    };
+
+    /**
      * FmFilterModule  
      * Simplified filter module for FM synth (LP/HP/BP post-FM).
      */

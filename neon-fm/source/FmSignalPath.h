@@ -83,10 +83,14 @@ namespace neon
             // Master amplitude envelope
             juce::ADSR ampEnv;
 
+            // Filter envelope
+            juce::ADSR filterEnv;
+
             void reset()
             {
                 for (auto& op : ops) op.reset();
                 ampEnv.reset();
+                filterEnv.reset();
                 filter1.reset();
                 filter2.reset();
                 isActive.store (false);
@@ -141,6 +145,10 @@ namespace neon
         float baseFilterRes = 0.0f;
         float filterKeyTrack = 0.0f;
         bool filterIs24dB = true;
+
+        // Filter envelope
+        juce::ADSR::Parameters filterEnvParams { 0.01f, 0.3f, 0.0f, 0.3f };
+        float filterEnvAmount = 0.0f;  // -1.0 to 1.0, bipolar
 
         // Master amp
         float ampLevel = 0.8f;

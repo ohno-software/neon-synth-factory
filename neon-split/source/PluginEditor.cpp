@@ -276,12 +276,12 @@ namespace neon
         // 5: Librarian
         auto libModule = std::make_unique<LibrarianModule> ("Librarian", theme.background.brighter());
 
-        modules.add (std::move (bass));       // 0 - BASS
-        modules.add (std::move (pad));        // 1 - PAD
-        modules.add (std::move (arp));        // 2 - ARP
-        modules.add (std::move (drums));      // 3 - DRUMS
-        modules.add (std::move (splitCtrl));  // 4 - SPLIT
-        modules.add (std::move (libModule));  // 5 - LIB
+        modules.add (bass.release());       // 0 - BASS
+        modules.add (pad.release());        // 1 - PAD
+        modules.add (arp.release());        // 2 - ARP
+        modules.add (drums.release());      // 3 - DRUMS
+        modules.add (splitCtrl.release());  // 4 - SPLIT
+        modules.add (libModule.release());  // 5 - LIB
 
         for (auto* m : modules)
             addChildComponent (m);
