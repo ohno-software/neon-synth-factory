@@ -21,3 +21,4 @@ JUCE-tutorials/
 # Given the "factory" name, maybe they WANT the whole thing?
 # Let's check if the user has specific instructions about JUCE.
 # For now, I'll ignore artifacts and build dirs at least.
+neon-synth-factory.code-workspace
