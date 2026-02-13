@@ -103,23 +103,23 @@ namespace neon
             envMod->addParameter       ("Slot " + juce::String(i) + " Amount", -100.0f, 100.0f, 0.0f);
         }
 
-        modules.add (std::move (osc1));        // 0 - OSC1
-        modules.add (std::move (osc2));        // 1 - OSC2
-        modules.add (std::move (subOsc));      // 2 - SUB
-        modules.add (std::move (noise));       // 3 - NOISE
-        modules.add (std::move (envPitch));    // 4 - P-ENV
-        modules.add (std::move (filter));      // 5 - FILTER
-        modules.add (std::move (envFilter));   // 6 - F-ENV
-        modules.add (std::move (amp));         // 7 - AMP
-        modules.add (std::move (envAmp));      // 8 - A-ENV
-        modules.add (std::move (lfo1));        // 9 - LFO1
-        modules.add (std::move (lfo2));        // 10 - LFO2
-        modules.add (std::move (modMatrix));   // 11 - MOD
-        modules.add (std::move (envMod));      // 12 - M-ENV
-        modules.add (std::move (fxModule));    // 13 - FX
-        modules.add (std::move (ctrlModule));  // 14 - CTRL
-        modules.add (std::move (arp));         // 15 - ARP
-        modules.add (std::move (libModule));   // 16 - LIB (startup)
+        modules.add (osc1.release());        // 0 - OSC1
+        modules.add (osc2.release());        // 1 - OSC2
+        modules.add (subOsc.release());      // 2 - SUB
+        modules.add (noise.release());       // 3 - NOISE
+        modules.add (envPitch.release());    // 4 - P-ENV
+        modules.add (filter.release());      // 5 - FILTER
+        modules.add (envFilter.release());   // 6 - F-ENV
+        modules.add (amp.release());         // 7 - AMP
+        modules.add (envAmp.release());      // 8 - A-ENV
+        modules.add (lfo1.release());        // 9 - LFO1
+        modules.add (lfo2.release());        // 10 - LFO2
+        modules.add (modMatrix.release());   // 11 - MOD
+        modules.add (envMod.release());      // 12 - M-ENV
+        modules.add (fxModule.release());    // 13 - FX
+        modules.add (ctrlModule.release());  // 14 - CTRL
+        modules.add (arp.release());         // 15 - ARP
+        modules.add (libModule.release());   // 16 - LIB (startup)
 
         for (auto* m : modules)
             addChildComponent (m);

@@ -294,20 +294,20 @@ namespace neon
         auto libModule = std::make_unique<LibrarianModule> ("Librarian", theme.background.brighter());
 
         // Add all modules
-        modules.add (std::move (algo));       // 0 - ALGO
-        modules.add (std::move (op1));        // 1 - OP1
-        modules.add (std::move (op2));        // 2 - OP2
-        modules.add (std::move (op3));        // 3 - OP3
-        modules.add (std::move (op4));        // 4 - OP4
-        modules.add (std::move (filter));     // 5 - FILTER
-        modules.add (std::move (filterEnv));  // 6 - F-ENV
-        modules.add (std::move (amp));        // 7 - AMP
-        modules.add (std::move (envAmp));     // 8 - A-ENV
-        modules.add (std::move (lfo1));       // 9 - LFO1
-        modules.add (std::move (lfo2));       // 10 - LFO2
-        modules.add (std::move (fxModule));   // 11 - FX
-        modules.add (std::move (ctrlModule)); // 12 - CTRL
-        modules.add (std::move (libModule));  // 13 - LIB
+        modules.add (algo.release());       // 0 - ALGO
+        modules.add (op1.release());        // 1 - OP1
+        modules.add (op2.release());        // 2 - OP2
+        modules.add (op3.release());        // 3 - OP3
+        modules.add (op4.release());        // 4 - OP4
+        modules.add (filter.release());     // 5 - FILTER
+        modules.add (filterEnv.release());  // 6 - F-ENV
+        modules.add (amp.release());        // 7 - AMP
+        modules.add (envAmp.release());     // 8 - A-ENV
+        modules.add (lfo1.release());       // 9 - LFO1
+        modules.add (lfo2.release());       // 10 - LFO2
+        modules.add (fxModule.release());   // 11 - FX
+        modules.add (ctrlModule.release()); // 12 - CTRL
+        modules.add (libModule.release());  // 13 - LIB
 
         for (auto* m : modules)
             addChildComponent (m);

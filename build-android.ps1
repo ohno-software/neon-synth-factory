@@ -112,7 +112,7 @@ if ($AndroidBuildDir) {
                 if ($IsWindows) {
                     & cmd /c "$GradleWrapper assembleRelease"
                 } else {
-                    & bash -c "./gradlew assembleRelease"
+                    & bash -c "chmod +x gradlew && ./gradlew assembleRelease"
                 }
             } finally {
                 Pop-Location

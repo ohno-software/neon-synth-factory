@@ -825,7 +825,11 @@ namespace neon
                     // NEW: Scale filter envelope amount by velocity and aftertouch
                     float scaledFilterEnvAmt = filterEnvAmount * (1.0f + v.velocity * filterEnvVelocity + v.aftertouch * filterEnvAftertouch);
                     
-                    float totalOctaves = midInOctaves + kTrackOctaves + (envF * scaledFilterEnvAmt / 10.0f) + (v.mFiltCut * 5.0f) + velocityMod + aftertouchMod;
+                    // Filter modulation: The envF value should be used to affect the filter cutoff
+                    // Make sure we're properly scaling it with the amount parameter and applying it as a modulator
+                    float filterModAmount = envF * scaledFilterEnvAmt;
+                    
+                    float totalOctaves = midInOctaves + kTrackOctaves + (filterModAmount / 10.0f) + (v.mFiltCut * 5.0f) + velocityMod + aftertouchMod;
                     float modulatedHz = 20.0f * std::pow (2.0f, totalOctaves);
                     modulatedHz = juce::jlimit (20.0f, (float)sampleRate * 0.45f, modulatedHz);
 

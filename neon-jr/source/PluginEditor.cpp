@@ -76,22 +76,22 @@ namespace neon
             envMod->addParameter       ("Slot " + juce::String(i) + " Amount", -100.0f, 100.0f, 0.0f);
         }
 
-        modules.add (std::move (osc1));        // 0 - OSC
-        modules.add (std::move (subOsc));      // 1 - SUB
-        modules.add (std::move (noise));       // 2 - NOISE
-        modules.add (std::move (envPitch));    // 3 - P-ENV
-        modules.add (std::move (filter));      // 4 - FILTER
-        modules.add (std::move (envFilter));   // 5 - F-ENV
-        modules.add (std::move (amp));         // 6 - AMP
-        modules.add (std::move (envAmp));      // 7 - A-ENV
-        modules.add (std::move (lfo1));        // 8 - LFO1
-        modules.add (std::move (lfo2));        // 9 - LFO2
-        modules.add (std::move (modMatrix));   // 10 - MOD
-        modules.add (std::move (envMod));      // 11 - M-ENV
-        modules.add (std::move (fxModule));    // 12 - FX
-        modules.add (std::move (ctrlModule));  // 13 - CTRL
-        modules.add (std::move (arp));         // 14 - ARP
-        modules.add (std::move (libModule));   // 15 - LIB (startup)
+        modules.add (osc1.release());        // 0 - OSC
+        modules.add (subOsc.release());      // 1 - SUB
+        modules.add (noise.release());       // 2 - NOISE
+        modules.add (envPitch.release());    // 3 - P-ENV
+        modules.add (filter.release());      // 4 - FILTER
+        modules.add (envFilter.release());   // 5 - F-ENV
+        modules.add (amp.release());         // 6 - AMP
+        modules.add (envAmp.release());      // 7 - A-ENV
+        modules.add (lfo1.release());        // 8 - LFO1
+        modules.add (lfo2.release());        // 9 - LFO2
+        modules.add (modMatrix.release());   // 10 - MOD
+        modules.add (envMod.release());      // 11 - M-ENV
+        modules.add (fxModule.release());    // 12 - FX
+        modules.add (ctrlModule.release());  // 13 - CTRL
+        modules.add (arp.release());         // 14 - ARP
+        modules.add (libModule.release());   // 15 - LIB (startup)
 
         for (auto* m : modules)
             addChildComponent (m);

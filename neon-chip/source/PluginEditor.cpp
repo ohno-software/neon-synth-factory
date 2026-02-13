@@ -287,15 +287,15 @@ namespace neon
         auto libModule = std::make_unique<LibrarianModule> ("Librarian", theme.background.brighter());
 
         // Add modules
-        modules.add (std::move (chipOsc));     // 0 - CHIP OSC
-        modules.add (std::move (filter));      // 1 - FILTER
-        modules.add (std::move (amp));         // 2 - AMP
-        modules.add (std::move (envAmp));      // 3 - A-ENV
-        modules.add (std::move (lfo1));        // 4 - LFO1
-        modules.add (std::move (lfo2));        // 5 - LFO2
-        modules.add (std::move (fxModule));    // 6 - FX
-        modules.add (std::move (ctrlModule));  // 7 - CTRL
-        modules.add (std::move (libModule));   // 8 - LIB
+        modules.add (chipOsc.release());     // 0 - CHIP OSC
+        modules.add (filter.release());      // 1 - FILTER
+        modules.add (amp.release());         // 2 - AMP
+        modules.add (envAmp.release());      // 3 - A-ENV
+        modules.add (lfo1.release());        // 4 - LFO1
+        modules.add (lfo2.release());        // 5 - LFO2
+        modules.add (fxModule.release());    // 6 - FX
+        modules.add (ctrlModule.release());  // 7 - CTRL
+        modules.add (libModule.release());   // 8 - LIB
 
         for (auto* m : modules)
             addChildComponent (m);

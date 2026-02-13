@@ -471,6 +471,7 @@ namespace neon
 
                 // Apply LFO modulation to operators
                 float lfoFreqMod = 0.0f;
+                float lfoFilterMod = 0.0f;
                 float lfoOpLevelMod[4] = { 0.0f };
 
                 for (int li = 0; li < 2; ++li)
@@ -498,8 +499,7 @@ namespace neon
 
                         if (target == (int) FmModTarget::FilterCutoff)
                         {
-                            float modCut = baseFilterCutoff * std::pow (2.0f, lfoVal * 4.0f);
-                            baseFilterCutoff = juce::jlimit (20.0f, 20000.0f, modCut);
+                            lfoFilterMod += lfoVal * 4.0f;
                         }
                     }
                 }
@@ -532,7 +532,7 @@ namespace neon
                 float filterEnvVal = v.filterEnv.getNextSample();
 
                 // Filter (runs at oversampled rate for better response)
-                float cutoff = baseFilterCutoff;
+                float cutoff = baseFilterCutoff * std::pow (2.0f, lfoFilterMod);
 
                 // Apply filter envelope: bipolar amount modulates cutoff in octaves
                 if (std::abs (filterEnvAmount) > 0.001f)
