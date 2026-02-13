@@ -108,7 +108,7 @@ void BassEngine::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer
 void BassEngine::setLPFCutoff(float hz)
 {
     lpfCutoff = juce::jlimit(20.0f, 20000.0f, hz);
-    *lpFilter.coefficients = *juce::dsp::IIR::Coefficients<float>::makeLowPass(sampleRate, lpfCutoff, 0.7071f);
+    lpFilter.state = juce::dsp::IIR::Coefficients<float>::makeLowPass(sampleRate, lpfCutoff, 0.7071f);
 }
 
 //==============================================================================

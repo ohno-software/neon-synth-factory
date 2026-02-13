@@ -23,6 +23,7 @@ namespace neon
         bassEngine.reset();
         padEngine.reset();
         arpEngine.reset();
+        drumEngine.reset();
         patternEngine.reset();
     }
 

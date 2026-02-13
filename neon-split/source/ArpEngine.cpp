@@ -15,11 +15,7 @@ void ArpEngine::prepare(double sr, int samplesPerBlock)
     delay.prepare(sr, samplesPerBlock);
     reverb.prepare(sr, samplesPerBlock);
 
-    juce::dsp::ProcessSpec spec;
-    spec.sampleRate = sr;
-    spec.maximumBlockSize = samplesPerBlock;
-    spec.numChannels = 1; // Arp is mono before effects
-    filter.prepare(spec);
+    filter.reset();
     setFilterCutoff(filterCutoff);
 }
 

@@ -89,7 +89,7 @@ private:
     int currentPattern = 0;
     
     //==============================================================================
-    juce::dsp::IIR::Filter<float> lpFilter;
+    juce::dsp::ProcessorDuplicator<juce::dsp::IIR::Filter<float>, juce::dsp::IIR::Coefficients<float>> lpFilter;
     SyncDelay delay;
     float lpfCutoff = 20000.0f;
     bool delayEnabled = false;
