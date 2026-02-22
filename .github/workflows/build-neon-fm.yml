@@ -87,15 +87,21 @@ jobs:
         run: |
           mkdir out
 
-          if ("${{ matrix.platform }}" -eq "PC") {
+          if ("${{ runner.os }}" -eq "Windows") {
               mkdir dist-pc
               Copy-Item -Path "artifacts/neon-fm/Standalone/*.exe" -Destination dist-pc/
+            if (Test-Path "artifacts/neon-fm/waves-1") {
+              Copy-Item -Path "artifacts/neon-fm/waves-1" -Destination dist-pc/ -Recurse
+            }
               Copy-Item -Path "artifacts/neon-fm/VST3" -Destination dist-pc/ -Recurse
               Compress-Archive -Path dist-pc/* -DestinationPath "Neon-FM-PC.zip"
           }
-          elseif ("${{ matrix.platform }}" -eq "Mac") {
+          elseif ("${{ runner.os }}" -eq "macOS") {
               mkdir dist-mac
-              Copy-Item -Path "artifacts/neon-fm/Standalone/Neon FM.app" -Destination dist-mac/ -Recurse
+            Copy-Item -Path "artifacts/neon-fm/Standalone/*.app" -Destination dist-mac/ -Recurse
+            if (Test-Path "artifacts/neon-fm/waves-1") {
+              Copy-Item -Path "artifacts/neon-fm/waves-1" -Destination dist-mac/ -Recurse
+            }
               Copy-Item -Path "artifacts/neon-fm/VST3" -Destination dist-mac/ -Recurse
           }
           elseif ("${{ matrix.platform }}" -eq "Android") {
@@ -110,6 +116,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Neon-FM-${{ matrix.platform }}
+          if-no-files-found: ignore
           path: |
             ${{ matrix.platform == 'PC' && 'Neon-FM-PC.zip' || '' }}
             ${{ matrix.platform == 'Mac' && 'dist-mac/' || '' }}

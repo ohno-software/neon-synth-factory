@@ -6,7 +6,23 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Paths to dependencies
-set(JUCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../JUCE)
+set(JUCE_DIR_CANDIDATES
+    ${CMAKE_CURRENT_SOURCE_DIR}/../JUCE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../third-party/JUCE
+)
+
+set(JUCE_DIR "")
+foreach(candidate IN LISTS JUCE_DIR_CANDIDATES)
+    if (EXISTS "${candidate}/CMakeLists.txt")
+        set(JUCE_DIR ${candidate})
+        break()
+    endif()
+endforeach()
+
+if (JUCE_DIR STREQUAL "")
+    message(FATAL_ERROR "JUCE not found. Expected one of: ${JUCE_DIR_CANDIDATES}")
+endif()
+
 set(COMPONENTS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../neon-components)
 
 # Add JUCE
