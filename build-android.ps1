@@ -16,10 +16,75 @@ param (
     [switch]$AllSynths,
 
     [Parameter(Mandatory=$false)]
-    [switch]$Clean
+    [switch]$Clean,
+
+    [Parameter(Mandatory=$false)]
+    [switch]$SkipValidation
 )
 
 $ErrorActionPreference = "Stop"
+
+# ==================== VALIDATION FUNCTIONS ====================
+
+function Validate-ApkFile {
+    param([string]$ApkPath)
+    
+    if (-not (Test-Path $ApkPath)) {
+        return $false
+    }
+    
+    $fileSize = (Get-Item $ApkPath).Length
+    if ($fileSize -lt 1MB) {
+        Write-Warning "APK file size suspiciously small: $([math]::Round($fileSize / 1KB, 2)) KB"
+        return $false
+    }
+    
+    return $true
+}
+
+function Validate-ApkPermissions {
+    param([string]$ApkPath)
+    
+    # Check if we have aapt tool (Android Asset Packaging Tool)
+    $aaptPath = $null
+    if ($env:ANDROID_HOME) {
+        $aaptPath = Get-ChildItem -Path "$env:ANDROID_HOME/build-tools" -Filter "aapt2" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
+    }
+    
+    if (-not $aaptPath) {
+        Write-Warning "aapt2 not found; skipping APK permission validation"
+        return $true
+    }
+    
+    try {
+        $dumpOutput = & $aaptPath dump badging $ApkPath 2>&1 | Out-String
+        
+        $requiredPerms = @("RECORD_AUDIO", "INTERNET")
+        $hasAudio = $dumpOutput -match "uses-permission.*RECORD_AUDIO"
+        
+        if ($hasAudio) {
+            Write-Host "✓ APK has RECORD_AUDIO permission" -ForegroundColor Green
+        } else {
+            Write-Warning "APK missing RECORD_AUDIO permission (may be required for audio I/O)"
+        }
+        
+        return $true
+    } catch {
+        Write-Warning "Failed to validate APK permissions: $_"
+        return $true
+    }
+}
+
+function Test-JavaInstalled {
+    try {
+        $javaVersion = & java -version 2>&1 | Select-Object -First 1
+        Write-Host "Found Java: $javaVersion" -ForegroundColor Green
+        return $true
+    } catch {
+        Write-Warning "Java not found in PATH"
+        return $false
+    }
+}
 
 $RootDir = $PSScriptRoot
 $DefaultSynths = @(
@@ -371,21 +436,32 @@ include ':app'
         $WrapperUnixPath = Join-Path $ApkProjectDir "gradlew"
 
         if (-not $env:JAVA_HOME -and -not (Get-Command java -ErrorAction SilentlyContinue)) {
-            Write-Warning "Java runtime not found (JAVA_HOME and java command missing); skipping APK packaging"
+            Write-Error "Java runtime not found (JAVA_HOME and java command missing). Cannot build APK without Java. Please install JDK 17 or later."
         } elseif ($IsWindows -and -not (Test-Path $WrapperPath)) {
-            Write-Warning "Gradle wrapper not found in APK project; skipping APK packaging"
+            Write-Error "Gradle wrapper not found in APK project at $WrapperPath. Check JUCE template integrity."
         } elseif (-not $IsWindows -and -not (Test-Path $WrapperUnixPath)) {
-            Write-Warning "Gradle wrapper not found in APK project; skipping APK packaging"
+            Write-Error "Gradle wrapper not found in APK project at $WrapperUnixPath. Check JUCE template integrity."
         } else {
+            # Test Java before attempting build
+            if (-not (Test-JavaInstalled)) {
+                Write-Error "Java verification failed. Ensure JDK 17+ is installed and in PATH."
+            }
+
+            Write-Host "--- Packaging APK with Gradle ---" -ForegroundColor Cyan
             Push-Location $ApkProjectDir
             try {
                 if ($IsWindows) {
+                    Write-Host "Running: gradlew.bat --no-daemon assembleRelease" -ForegroundColor Cyan
                     & cmd /c "$WrapperPath --no-daemon assembleRelease"
                 } else {
+                    Write-Host "Running: ./gradlew --no-daemon assembleRelease" -ForegroundColor Cyan
                     & bash -c "chmod +x ./gradlew && ./gradlew --no-daemon assembleRelease"
                 }
+                
                 if ($LASTEXITCODE -ne 0) {
-                    Write-Warning "Gradle assembleRelease failed"
+                    Write-Error "Gradle assembleRelease failed with exit code $LASTEXITCODE. Check logs above for details."
+                } else {
+                    Write-Host "✓ Gradle build successful" -ForegroundColor Green
                 }
             } finally {
                 Pop-Location
@@ -404,6 +480,8 @@ if (-not (Test-Path $ArtifactsDir)) {
 # Find all APK files
 $ApkFiles = Get-ChildItem -Path $BuildDir -Recurse -Filter "*.apk" -File
 
+$apkBuildSuccessful = $false
+
 if ($ApkFiles) {
     $primaryApk = $ApkFiles | Where-Object { $_.Name -match "release" } | Select-Object -First 1
     if (-not $primaryApk) {
@@ -412,16 +490,39 @@ if ($ApkFiles) {
 
     foreach ($apk in $ApkFiles) {
         Write-Host "Found APK: $($apk.Name)" -ForegroundColor Green
+        
+        # Validate APK file
+        if (-not $SkipValidation) {
+            if (Validate-ApkFile -ApkPath $apk.FullName) {
+                Write-Host "✓ APK file validation passed" -ForegroundColor Green
+                $apkBuildSuccessful = $true
+            } else {
+                Write-Warning "APK file validation failed: $($apk.Name)"
+                continue
+            }
+        } else {
+            $apkBuildSuccessful = $true
+        }
+        
         Copy-Item $apk.FullName -Destination $ArtifactsDir -Force
     }
 
-    if ($primaryApk) {
+    if ($primaryApk -and $apkBuildSuccessful) {
         $namedApkPath = Join-Path $ArtifactsDir ("{0}-{1}.apk" -f $ProjectName, $Config)
         Copy-Item $primaryApk.FullName -Destination $namedApkPath -Force
         Write-Host "Canonical APK: $(Split-Path $namedApkPath -Leaf)" -ForegroundColor Green
+        
+        # Validate permissions
+        if (-not $SkipValidation) {
+            Validate-ApkPermissions -ApkPath $namedApkPath | Out-Null
+        }
     }
 } else {
-    Write-Warning "No APK files found in build directory"
+    Write-Error "No APK files found in build directory after Gradle build. Check Gradle logs above for errors."
+}
+
+if (-not $apkBuildSuccessful) {
+    Write-Error "APK build failed validation checks"
 }
 
 # Find Android shared library outputs (JUCE standalone on CMake often produces .so only)
@@ -449,5 +550,24 @@ if (Test-Path $WavesSource) {
     Write-Host "Copied wavetables to artifacts" -ForegroundColor Green
 }
 
-Write-Host "--- Android Build Complete ---" -ForegroundColor Green
+Write-Host "`n" -ForegroundColor Green
+Write-Host "========================================" -ForegroundColor Green
+Write-Host "   Android Build Complete" -ForegroundColor Green
+Write-Host "========================================" -ForegroundColor Green
+
+$apkCount = (Get-ChildItem -Path $ArtifactsDir -Filter "*.apk" -ErrorAction SilentlyContinue | Measure-Object).Count
+$soCount = (Get-ChildItem -Path $ArtifactsDir -Recurse -Filter "*.so" -ErrorAction SilentlyContinue | Measure-Object).Count
+
+Write-Host "Synth: $Synth" -ForegroundColor Cyan
+Write-Host "Configuration: $Config" -ForegroundColor Cyan
 Write-Host "Artifacts location: $ArtifactsDir" -ForegroundColor Cyan
+Write-Host "APKs generated: $apkCount" -ForegroundColor Green
+Write-Host "Native libraries (.so): $soCount" -ForegroundColor Green
+
+if ($apkCount -eq 0) {
+    Write-Error "No APKs were generated. Build may have failed."
+} else {
+    Write-Host "`nNext steps:" -ForegroundColor Yellow
+    Write-Host "1. Install APK on Android device: adb install -r artifacts/$Synth/Android/*.apk" -ForegroundColor Yellow
+    Write-Host "2. See factory-docs/05_android_deployment.md for detailed instructions" -ForegroundColor Yellow
+}

@@ -84,6 +84,34 @@ jobs:
             ./build.ps1 -Synth ${{ inputs.synth }} -Config Release
           }
 
+      - name: Validate Android APK
+        if: matrix.platform == 'Android'
+        shell: pwsh
+        run: |
+          $SYNTH = "${{ inputs.synth }}"
+          $APK_DIR = "artifacts/$SYNTH/Android"
+          
+          if (-not (Test-Path $APK_DIR)) {
+            Write-Error "Android artifacts directory not found: $APK_DIR"
+          }
+          
+          $APK_FILES = Get-ChildItem -Path $APK_DIR -Filter "*.apk" -ErrorAction SilentlyContinue
+          if (-not $APK_FILES) {
+            Write-Error "No APK files found in $APK_DIR. APK build failed."
+          }
+          
+          $APK_COUNT = ($APK_FILES | Measure-Object).Count
+          Write-Host "✓ Found $APK_COUNT APK file(s)" -ForegroundColor Green
+          
+          foreach ($apk in $APK_FILES) {
+            $SIZE_MB = [math]::Round($apk.Length / 1MB, 2)
+            Write-Host "  - $($apk.Name) ($SIZE_MB MB)" -ForegroundColor Cyan
+            
+            if ($apk.Length -lt 1MB) {
+              Write-Warning "APK suspiciously small: only $SIZE_MB MB"
+            }
+          }
+
       - name: Validate macOS AU (auval)
         if: runner.os == 'macOS'
         shell: bash
