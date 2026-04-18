@@ -1,4 +1,4 @@
-# Neon Jr - Android Build Guide
+# Neon Synth Factory - Android Build Guide
 
 This guide explains how to build Neon Jr for Android devices, including setup for GitHub Actions CI/CD and local development.
 
@@ -42,8 +42,15 @@ The CI/CD workflow automatically sets up all required dependencies when you push
 # Make sure ANDROID_NDK_ROOT is set
 $env:ANDROID_NDK_ROOT = "C:\path\to\android-ndk-r26d"
 
-# Build Neon Jr for Android
+# Build one synth for Android
 .\build-android.ps1 -Synth neon-jr -Config Release
+```
+
+### Build APKs for all synths
+
+```powershell
+# Build every synth Android target and package APKs
+.\build-android.ps1 -AllSynths -Config Release
 ```
 
 ### With Custom NDK Path
@@ -66,8 +73,8 @@ artifacts/neon-jr/Android/
 ```
 
 Look for files like:
-- `NeonJr-release.apk` - Release build (optimized)
-- `NeonJr-debug.apk` - Debug build (if building with -Config Debug)
+- `app-release.apk` - raw Gradle output copy
+- `<ProjectName>-Release.apk` - canonical synth-specific artifact (for example `NeonJr-Release.apk`)
 
 ## Installing on Samsung Galaxy A9
 

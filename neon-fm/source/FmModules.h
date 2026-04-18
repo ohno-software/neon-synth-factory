@@ -1,7 +1,11 @@
 #pragma once
 
+#include <juce_graphics/juce_graphics.h>
 #include <neon_ui_components/neon_ui_components.h>
 #include "FmAlgorithm.h"
+
+// If you link NeonFmBinaryData, juce adds this header globally.
+#include <BinaryData.h>
 
 namespace neon
 {
@@ -167,190 +171,45 @@ namespace neon
             addSpacer();
 
             lastAdjustedIndex = 0;
+
+            auto loadSvg = [](const char* data, int size) {
+                return juce::Drawable::createFromImageData(data, size);
+            };
+
+            algoDrawables[0] = loadSvg(BinaryData::algo_1_serial_svg, BinaryData::algo_1_serial_svgSize);
+            algoDrawables[1] = loadSvg(BinaryData::algo_2_branch_svg, BinaryData::algo_2_branch_svgSize);
+            algoDrawables[2] = loadSvg(BinaryData::algo_3_dualstack_svg, BinaryData::algo_3_dualstack_svgSize);
+            algoDrawables[3] = loadSvg(BinaryData::algo_4_triplemod_svg, BinaryData::algo_4_triplemod_svgSize);
+            algoDrawables[4] = loadSvg(BinaryData::algo_5_onetomany_svg, BinaryData::algo_5_onetomany_svgSize);
+            algoDrawables[5] = loadSvg(BinaryData::algo_6_paralleldual_svg, BinaryData::algo_6_paralleldual_svgSize);
+            algoDrawables[6] = loadSvg(BinaryData::algo_7_complexfork_svg, BinaryData::algo_7_complexfork_svgSize);
+            algoDrawables[7] = loadSvg(BinaryData::algo_8_fullparallel_svg, BinaryData::algo_8_fullparallel_svgSize);
         }
 
     protected:
+        std::unique_ptr<juce::Drawable> algoDrawables[8];
+
         void paintVisualization (juce::Graphics& g, juce::Rectangle<int> area) override
         {
-            auto r = area.reduced (60, 40).toFloat();
+            auto r = area.reduced (10, 10).toFloat();
             int algo = (int) parameters[0]->getValue();
 
             g.setColour (accentColor.withAlpha (0.06f));
             g.fillRoundedRectangle (r, 8.0f);
 
-            // Draw algorithm diagram
-            float boxSize = 40.0f;
-            float halfBox = boxSize / 2.0f;
-
-            // Positions for 4 operators in a grid
-            // We'll lay them out based on algorithm
-            struct OpPos { float x, y; };
-
-            float cx = r.getCentreX();
-            float cy = r.getCentreY();
-            float spacingX = 70.0f;
-            float spacingY = 60.0f;
-
-            // Default layout: horizontal row
-            OpPos positions[4];
-            
-            // Compute positions based on algorithm type
-            switch ((FmAlgorithmType)algo)
+            // Draw the SVG diagram making full use of the remaining area
+            if (algo >= 0 && algo < 8 && algoDrawables[algo] != nullptr)
             {
-                case FmAlgorithmType::SerialChain: // 1→2→3→4
-                    positions[0] = { cx - spacingX * 1.5f, cy };
-                    positions[1] = { cx - spacingX * 0.5f, cy };
-                    positions[2] = { cx + spacingX * 0.5f, cy };
-                    positions[3] = { cx + spacingX * 1.5f, cy };
-                    break;
-
-                case FmAlgorithmType::Branch: // 1→2→4, 3→4
-                    positions[0] = { cx - spacingX, cy - spacingY * 0.5f };
-                    positions[1] = { cx,            cy - spacingY * 0.5f };
-                    positions[2] = { cx,            cy + spacingY * 0.5f };
-                    positions[3] = { cx + spacingX, cy };
-                    break;
-
-                case FmAlgorithmType::DualStack: // (1→2) + (3→4)
-                    positions[0] = { cx - spacingX * 0.5f, cy - spacingY * 0.5f };
-                    positions[1] = { cx + spacingX * 0.5f, cy - spacingY * 0.5f };
-                    positions[2] = { cx - spacingX * 0.5f, cy + spacingY * 0.5f };
-                    positions[3] = { cx + spacingX * 0.5f, cy + spacingY * 0.5f };
-                    break;
-
-                case FmAlgorithmType::FullParallel: // 1+2+3+4
-                    positions[0] = { cx - spacingX * 1.5f, cy };
-                    positions[1] = { cx - spacingX * 0.5f, cy };
-                    positions[2] = { cx + spacingX * 0.5f, cy };
-                    positions[3] = { cx + spacingX * 1.5f, cy };
-                    break;
-
-                default: // Generic: row layout
-                    positions[0] = { cx - spacingX * 1.5f, cy };
-                    positions[1] = { cx - spacingX * 0.5f, cy };
-                    positions[2] = { cx + spacingX * 0.5f, cy };
-                    positions[3] = { cx + spacingX * 1.5f, cy };
-                    break;
+                // Optionally replace colors to suit our theme
+                algoDrawables[algo]->replaceColour(juce::Colour::fromString("#4a90e2"), accentColor.withAlpha(0.6f));
+                algoDrawables[algo]->replaceColour(juce::Colour::fromString("#4a9fff"), accentColor);
+                algoDrawables[algo]->replaceColour(juce::Colour::fromString("#50c878"), juce::Colours::hotpink); // Carrier
+                algoDrawables[algo]->replaceColour(juce::Colour::fromString("#888888"), accentColor.withAlpha(0.5f));
+                algoDrawables[algo]->replaceColour(juce::Colour::fromString("#666666"), accentColor.withAlpha(0.5f));
+                
+                auto svgBounds = r.reduced (10.0f);
+                algoDrawables[algo]->drawWithin (g, svgBounds, juce::RectanglePlacement::centred | juce::RectanglePlacement::onlyReduceInSize, 1.0f);
             }
-
-            // Draw connections first (behind boxes)
-            g.setColour (accentColor.withAlpha (0.4f));
-            auto drawArrow = [&] (OpPos from, OpPos to) {
-                g.drawArrow (juce::Line<float> (from.x, from.y, to.x, to.y)
-                                .withShortenedStart (halfBox + 2)
-                                .withShortenedEnd (halfBox + 2),
-                             2.0f, 8.0f, 8.0f);
-            };
-
-            // Draw connections based on algorithm
-            switch ((FmAlgorithmType)algo)
-            {
-                case FmAlgorithmType::SerialChain:
-                    drawArrow (positions[0], positions[1]);
-                    drawArrow (positions[1], positions[2]);
-                    drawArrow (positions[2], positions[3]);
-                    break;
-                case FmAlgorithmType::Branch:
-                    drawArrow (positions[0], positions[1]);
-                    drawArrow (positions[1], positions[3]);
-                    drawArrow (positions[2], positions[3]);
-                    break;
-                case FmAlgorithmType::DualStack:
-                    drawArrow (positions[0], positions[1]);
-                    drawArrow (positions[2], positions[3]);
-                    break;
-                case FmAlgorithmType::TripleCarrier:
-                    drawArrow (positions[0], positions[3]);
-                    drawArrow (positions[1], positions[3]);
-                    drawArrow (positions[2], positions[3]);
-                    break;
-                case FmAlgorithmType::DualMod:
-                    drawArrow (positions[0], positions[2]);
-                    drawArrow (positions[1], positions[3]);
-                    break;
-                case FmAlgorithmType::OneToThree:
-                    drawArrow (positions[0], positions[1]);
-                    drawArrow (positions[0], positions[2]);
-                    drawArrow (positions[0], positions[3]);
-                    break;
-                case FmAlgorithmType::TripleParallel:
-                    drawArrow (positions[0], positions[1]);
-                    break;
-                case FmAlgorithmType::FullParallel:
-                    // No connections
-                    break;
-                case FmAlgorithmType::YShape:
-                    drawArrow (positions[0], positions[2]);
-                    drawArrow (positions[1], positions[2]);
-                    drawArrow (positions[2], positions[3]);
-                    break;
-                case FmAlgorithmType::Diamond:
-                    drawArrow (positions[0], positions[1]);
-                    drawArrow (positions[0], positions[2]);
-                    drawArrow (positions[1], positions[3]);
-                    drawArrow (positions[2], positions[3]);
-                    break;
-                case FmAlgorithmType::CascadeBranch:
-                    drawArrow (positions[0], positions[1]);
-                    drawArrow (positions[1], positions[2]);
-                    drawArrow (positions[2], positions[3]);
-                    drawArrow (positions[0], positions[3]);
-                    break;
-                default: break;
-            }
-
-            // Determine which ops are carriers (output to audio) vs modulators
-            auto isCarrier = [algo](int op) -> bool {
-                switch ((FmAlgorithmType) algo) {
-                    case FmAlgorithmType::SerialChain:     return op == 3;
-                    case FmAlgorithmType::Branch:          return op == 3;
-                    case FmAlgorithmType::DualStack:       return op == 1 || op == 3;
-                    case FmAlgorithmType::TripleCarrier:   return op == 3;
-                    case FmAlgorithmType::DualMod:         return op == 2 || op == 3;
-                    case FmAlgorithmType::OneToThree:      return op == 1 || op == 2 || op == 3;
-                    case FmAlgorithmType::TripleParallel:  return op == 1 || op == 2 || op == 3;
-                    case FmAlgorithmType::FullParallel:    return true;
-                    case FmAlgorithmType::YShape:          return op == 3;
-                    case FmAlgorithmType::Diamond:         return op == 3;
-                    case FmAlgorithmType::CascadeBranch:   return op == 3;
-                    default: return op == 3;
-                }
-            };
-
-            // Draw operator boxes
-            for (int i = 0; i < 4; ++i)
-            {
-                auto opRect = juce::Rectangle<float> (positions[i].x - halfBox,
-                                                       positions[i].y - halfBox,
-                                                       boxSize, boxSize);
-
-                bool carrier = isCarrier (i);
-
-                // Carriers get filled, modulators get outline
-                if (carrier)
-                {
-                    g.setColour (accentColor.withAlpha (0.6f));
-                    g.fillRoundedRectangle (opRect, 6.0f);
-                    g.setColour (juce::Colours::black);
-                }
-                else
-                {
-                    g.setColour (accentColor.withAlpha (0.15f));
-                    g.fillRoundedRectangle (opRect, 6.0f);
-                    g.setColour (accentColor.withAlpha (0.6f));
-                    g.drawRoundedRectangle (opRect, 6.0f, 2.0f);
-                    g.setColour (accentColor);
-                }
-
-                g.setFont (juce::FontOptions (18.0f));
-                g.drawText (juce::String (i + 1), opRect, juce::Justification::centred);
-            }
-
-            // Draw output arrow from carriers
-            g.setColour (accentColor.withAlpha (0.6f));
-            float outY = r.getBottom() - 20;
-            g.setFont (12.0f);
-            g.drawText ("→ OUT", r.withHeight (20).withY ((int) outY), juce::Justification::centred);
         }
     };
 

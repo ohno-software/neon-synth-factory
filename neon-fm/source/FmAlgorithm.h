@@ -10,19 +10,16 @@ namespace neon
      * FmAlgorithm
      * Defines the routing topology between 4 FM operators.
      * 
-     * Classic DX-style algorithms adapted for 4 operators:
+     * DX100-style algorithms for 4 operators with non-overlapping visual layout:
      * 
      *  0: Serial Chain    1 → 2 → 3 → 4 → out
-     *  1: Branch          1 → 2 → 4 → out, 3 → 4
+     *  1: Branch          (1 → 2 → 4) + (3 → 4) → out
      *  2: Dual Stack      (1 → 2) + (3 → 4) → out
-     *  3: Triple Carrier  1 → 4, 2 → 4, 3 → 4 → out (3 mods, 1 carrier)
-     *  4: Dual Mod        (1 → 3) + (2 → 4) → out
-     *  5: One to Three    1 → 2, 1 → 3, 1 → 4 → out (1 mod, 3 carriers)
-     *  6: Triple Parallel (1 → 2) + 3 + 4 → out
+     *  3: Triple Carrier  1 + 2 + 3 → 4 → out (3 modulators, 1 carrier)
+     *  4: One to Many     1 → (2, 3, 4) → out (1 modulator, 3 carriers)
+     *  5: Parallel Dual   (1 → 2) + 3 + 4 → out
+     *  6: Complex Fork    (1 → 2, 1 → 3) + (2, 3 → 4) → out
      *  7: Full Parallel   1 + 2 + 3 + 4 → out (additive)
-     *  8: Y-Shape         1 → 3 → 4 → out, 2 → 3
-     *  9: Diamond         1 → 2 → 4, 1 → 3 → 4 → out
-     * 10: Cascade Branch  1 → 2 → 3 → 4, 1 → 4 → out
      */
     enum class FmAlgorithmType
     {
@@ -30,13 +27,10 @@ namespace neon
         Branch,             // 1→2→4, 3→4→out
         DualStack,          // (1→2) + (3→4)→out
         TripleCarrier,      // 1,2,3→4→out
-        DualMod,            // (1→3) + (2→4)→out
-        OneToThree,         // 1→(2+3+4)→out
-        TripleParallel,     // (1→2) + 3 + 4→out
+        OneToMany,          // 1→(2,3,4)→out
+        ParallelDual,       // (1→2) + 3 + 4→out
+        ComplexFork,        // 1→2,3 then 2,3→4→out
         FullParallel,       // 1+2+3+4→out
-        YShape,             // 1→3→4, 2→3→out
-        Diamond,            // 1→2→4, 1→3→4→out
-        CascadeBranch,      // 1→2→3→4, 1→4→out
         Count
     };
 
@@ -47,9 +41,8 @@ namespace neon
     {
         static const juce::String names[] = {
             "1: Serial",      "2: Branch",       "3: Dual Stack",
-            "4: Triple Mod",  "5: Dual Mod",     "6: One→Three",
-            "7: Triple Par",  "8: Full Parallel", "9: Y-Shape",
-            "10: Diamond",    "11: Cascade"
+            "4: Triple Mod",  "5: One→Many",     "6: Parallel Dual",
+            "7: Complex",     "8: Full Parallel"
         };
         if (index >= 0 && index < (int)FmAlgorithmType::Count)
             return names[index];
@@ -131,18 +124,7 @@ namespace neon
                     break;
                 }
 
-                case FmAlgorithmType::DualMod:
-                {
-                    // (1→3) + (2→4) → out
-                    float o1 = ops[0].processSample (baseFreq);
-                    float o2 = ops[1].processSample (baseFreq);
-                    float o3 = ops[2].processSample (baseFreq, o1 * modDepth);
-                    float o4 = ops[3].processSample (baseFreq, o2 * modDepth);
-                    out = (o3 + o4) * 0.5f;
-                    break;
-                }
-
-                case FmAlgorithmType::OneToThree:
+                case FmAlgorithmType::OneToMany:
                 {
                     // 1 → (2, 3, 4) → out
                     float o1 = ops[0].processSample (baseFreq);
@@ -153,7 +135,7 @@ namespace neon
                     break;
                 }
 
-                case FmAlgorithmType::TripleParallel:
+                case FmAlgorithmType::ParallelDual:
                 {
                     // (1→2) + 3 + 4 → out
                     float o1 = ops[0].processSample (baseFreq);
@@ -161,6 +143,17 @@ namespace neon
                     float o3 = ops[2].processSample (baseFreq);
                     float o4 = ops[3].processSample (baseFreq);
                     out = (o2 + o3 + o4) * 0.333f;
+                    break;
+                }
+
+                case FmAlgorithmType::ComplexFork:
+                {
+                    // 1→2, 1→3, 2,3→4→out
+                    float o1 = ops[0].processSample (baseFreq);
+                    float o2 = ops[1].processSample (baseFreq, o1 * modDepth);
+                    float o3 = ops[2].processSample (baseFreq, o1 * modDepth);
+                    float o4 = ops[3].processSample (baseFreq, (o2 + o3) * modDepth * 0.5f);
+                    out = o4;
                     break;
                 }
 
@@ -172,39 +165,6 @@ namespace neon
                     float o3 = ops[2].processSample (baseFreq);
                     float o4 = ops[3].processSample (baseFreq);
                     out = (o1 + o2 + o3 + o4) * 0.25f;
-                    break;
-                }
-
-                case FmAlgorithmType::YShape:
-                {
-                    // 1→3, 2→3, 3→4→out
-                    float o1 = ops[0].processSample (baseFreq);
-                    float o2 = ops[1].processSample (baseFreq);
-                    float o3 = ops[2].processSample (baseFreq, (o1 + o2) * modDepth * 0.5f);
-                    float o4 = ops[3].processSample (baseFreq, o3 * modDepth);
-                    out = o4;
-                    break;
-                }
-
-                case FmAlgorithmType::Diamond:
-                {
-                    // 1→2→4, 1→3→4→out
-                    float o1 = ops[0].processSample (baseFreq);
-                    float o2 = ops[1].processSample (baseFreq, o1 * modDepth);
-                    float o3 = ops[2].processSample (baseFreq, o1 * modDepth);
-                    float o4 = ops[3].processSample (baseFreq, (o2 + o3) * modDepth * 0.5f);
-                    out = o4;
-                    break;
-                }
-
-                case FmAlgorithmType::CascadeBranch:
-                {
-                    // 1→2→3→4, 1→4→out
-                    float o1 = ops[0].processSample (baseFreq);
-                    float o2 = ops[1].processSample (baseFreq, o1 * modDepth);
-                    float o3 = ops[2].processSample (baseFreq, o2 * modDepth);
-                    float o4 = ops[3].processSample (baseFreq, (o3 + o1) * modDepth * 0.5f);
-                    out = o4;
                     break;
                 }
 
