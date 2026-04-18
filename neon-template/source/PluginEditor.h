@@ -21,6 +21,7 @@ namespace neon
         NeonTemplateAudioProcessor& audioProcessor;
         LookAndFeel lookAndFeel;
         ModuleSelectionPanel selectionPanel;
+        NeonDebugLauncher debugLauncher;
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(NeonTemplateAudioProcessorEditor)
     };

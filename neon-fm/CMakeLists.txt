@@ -31,6 +31,10 @@ add_subdirectory(${JUCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}/JUCE)
 # Add neon-components module
 add_subdirectory(${COMPONENTS_DIR} ${CMAKE_CURRENT_BINARY_DIR}/neon-components)
 
+# Gather all SVG resources
+file(GLOB_RECURSE SVG_FILES "${CMAKE_CURRENT_SOURCE_DIR}/source/resources/algorithms/*.svg")
+juce_add_binary_data(NeonFmBinaryData SOURCES ${SVG_FILES})
+
 # Create the Plugin
 juce_add_plugin(NeonFM
     PRODUCT_NAME "Neon FM"
@@ -44,7 +48,7 @@ juce_add_plugin(NeonFM
     NEEDS_MIDI_OUTPUT FALSE
     IS_MIDI_EFFECT FALSE
     EDITOR_RESIZABLE TRUE
-    FORMATS VST3 AUv3 Standalone AndroidStudio
+    FORMATS VST3 AU AUv3 Standalone AndroidStudio
     STANDALONE_MENU_BAR TRUE
 )
 
@@ -57,6 +61,7 @@ target_sources(NeonFM
 
 target_link_libraries(NeonFM
     PRIVATE
+        NeonFmBinaryData
         neon_ui_components
         juce::juce_gui_basics
         juce::juce_gui_extra

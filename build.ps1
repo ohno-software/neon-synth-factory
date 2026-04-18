@@ -71,6 +71,24 @@ if (Test-Path $BinarySourceDir) {
         Copy-Item -Path $Vst3Path -Destination $ArtifactsDir -Recurse -Force
     }
 
+    # Copy AU bundle (macOS only — JUCE emits .component into AU/)
+    $AuPath = Join-Path $BinarySourceDir "AU"
+    if (Test-Path $AuPath) {
+        Write-Host "Copying AU bundle..."
+        $AuDest = Join-Path $ArtifactsDir "AU"
+        if (Test-Path $AuDest) { Remove-Item -Path $AuDest -Recurse -Force }
+        Copy-Item -Path $AuPath -Destination $ArtifactsDir -Recurse -Force
+    }
+
+    # Copy AUv3 app extension (macOS / iOS)
+    $Auv3Path = Join-Path $BinarySourceDir "AUv3"
+    if (Test-Path $Auv3Path) {
+        Write-Host "Copying AUv3 bundle..."
+        $Auv3Dest = Join-Path $ArtifactsDir "AUv3"
+        if (Test-Path $Auv3Dest) { Remove-Item -Path $Auv3Dest -Recurse -Force }
+        Copy-Item -Path $Auv3Path -Destination $ArtifactsDir -Recurse -Force
+    }
+
     # Copy Wavetables for distribution
     $WavesSrc = Join-Path $SynthDir "waves-1"
     if (Test-Path $WavesSrc) {

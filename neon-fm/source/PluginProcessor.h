@@ -30,8 +30,8 @@ namespace neon
         const juce::String getProgramName (int) override { return {}; }
         void changeProgramName (int, const juce::String&) override {}
 
-        void getStateInformation (juce::MemoryBlock&) override {}
-        void setStateInformation (const void*, int) override {}
+        void getStateInformation (juce::MemoryBlock&) override;
+        void setStateInformation (const void*, int) override;
 
         FmSignalPath& getSignalPath() { return signalPath; }
         juce::MidiKeyboardState& getKeyboardState() { return keyboardState; }

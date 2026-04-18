@@ -251,6 +251,71 @@ namespace neon
         int getCurrentBankIndex() const { return currentBankIndex; }
         int getCurrentPatchIndex() const { return currentPatchIndex; }
 
+        // -------- Host-managed state (DAW save/restore, called from AudioProcessor) --------
+
+        /** Serialize the full ParameterRegistry into a MemoryBlock for the host to persist. */
+        void saveStateToMemory (juce::MemoryBlock& destData) const
+        {
+            juce::DynamicObject::Ptr obj = new juce::DynamicObject();
+            obj->setProperty ("name", NeonRegistry::getCurrentPatchName());
+            obj->setProperty ("bank", currentBank);
+            obj->setProperty ("bankIndex", currentBankIndex);
+            obj->setProperty ("patchIndex", currentPatchIndex);
+
+            juce::DynamicObject::Ptr params = new juce::DynamicObject();
+            auto& registry = ParameterRegistry::getInstance();
+            for (auto& pair : registry.getParameters())
+            {
+                if (pair.first.contains ("Librarian"))
+                    continue;
+                params->setProperty (pair.first, pair.second->getValue());
+            }
+            obj->setProperty ("parameters", juce::var (params));
+
+            auto json = juce::JSON::toString (juce::var (obj));
+            destData.reset();
+            destData.append (json.toRawUTF8(), json.getNumBytesAsUTF8());
+        }
+
+        /** Restore parameters previously written by saveStateToMemory. */
+        void loadStateFromMemory (const void* data, int sizeInBytes)
+        {
+            if (data == nullptr || sizeInBytes <= 0)
+                return;
+
+            auto json = juce::String::fromUTF8 (static_cast<const char*> (data), sizeInBytes);
+            auto parsed = juce::JSON::parse (json);
+            if (! parsed.isObject())
+                return;
+
+            auto patchName = parsed.getProperty ("name", "INIT PATCH").toString();
+            NeonRegistry::setCurrentPatchName (patchName);
+
+            if (auto bankProp = parsed.getProperty ("bank", juce::var()); bankProp.isString())
+            {
+                int idx = bankNames.indexOf (bankProp.toString());
+                if (idx >= 0)
+                    currentBankIndex = idx;
+                currentBank = bankProp.toString();
+            }
+            if (auto pIdx = parsed.getProperty ("patchIndex", juce::var()); pIdx.isInt())
+                currentPatchIndex = (int) pIdx;
+
+            auto paramsObj = parsed.getProperty ("parameters", juce::var());
+            if (paramsObj.isObject())
+            {
+                auto& registry = ParameterRegistry::getInstance();
+                if (auto* dynamicObj = paramsObj.getDynamicObject())
+                {
+                    for (auto& it : dynamicObj->getProperties())
+                    {
+                        if (auto* p = registry.getParameter (it.name.toString()))
+                            p->setValue ((float) it.value);
+                    }
+                }
+            }
+        }
+
     private:
         PatchManager() = default;
 

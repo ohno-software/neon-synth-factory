@@ -1,4 +1,4 @@
-name: Build Neon 777
+name: Build Neon SID
 
 on:
   push:
@@ -76,13 +76,13 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Build Neon 777
+      - name: Build Neon SID
         shell: pwsh
         run: |
           if ("${{ matrix.platform }}" -eq "Android") {
-            ./build-android.ps1 -Synth neon-777 -Config Release
+            ./build-android.ps1 -Synth neon-sid -Config Release
           } else {
-            ./build.ps1 -Synth neon-777 -Config Release
+            ./build.ps1 -Synth neon-sid -Config Release
           }
 
       - name: Validate macOS AU (auval)
@@ -90,7 +90,7 @@ jobs:
         shell: bash
         run: |
           set -e
-          AU_BUNDLE=$(find artifacts/neon-777/AU -name "*.component" -maxdepth 2 | head -n 1)
+          AU_BUNDLE=$(find artifacts/neon-sid/AU -name "*.component" -maxdepth 2 | head -n 1)
           if [ -z "$AU_BUNDLE" ]; then
             echo "ERROR: No .component AU bundle was produced."
             exit 1
@@ -99,8 +99,8 @@ jobs:
           mkdir -p "$HOME/Library/Audio/Plug-Ins/Components"
           cp -R "$AU_BUNDLE" "$HOME/Library/Audio/Plug-Ins/Components/"
           killall -9 AudioComponentRegistrar 2>/dev/null || true
-          auval -a | grep -i "Ne77" || true
-          auval -v aumu Ne77 NeAu
+          auval -a | grep -i "NSID" || true
+          auval -v aumu NSID NeAu
 
       - name: Prepare Artifacts
         shell: pwsh
@@ -109,44 +109,38 @@ jobs:
 
           if ("${{ matrix.platform }}" -eq "PC") {
               mkdir dist-pc
-              Copy-Item -Path "artifacts/neon-777/Standalone/*.exe" -Destination dist-pc/
-              Copy-Item -Path "artifacts/neon-777/VST3" -Destination dist-pc/ -Recurse
-              if (Test-Path "artifacts/neon-777/waves-1") {
-                  Copy-Item -Path "artifacts/neon-777/waves-1" -Destination dist-pc/ -Recurse
-              }
-              Compress-Archive -Path dist-pc/* -DestinationPath "Neon-777-PC.zip"
+              Copy-Item -Path "artifacts/neon-sid/Standalone/*.exe" -Destination dist-pc/
+              Copy-Item -Path "artifacts/neon-sid/VST3" -Destination dist-pc/ -Recurse
+              Compress-Archive -Path dist-pc/* -DestinationPath "Neon-SID-PC.zip"
           }
           elseif ("${{ matrix.platform }}" -eq "Mac") {
               mkdir dist-mac
-              Copy-Item -Path "artifacts/neon-777/Standalone/Neon 777.app" -Destination dist-mac/ -Recurse
-              Copy-Item -Path "artifacts/neon-777/VST3" -Destination dist-mac/ -Recurse
-              if (Test-Path "artifacts/neon-777/AU") {
-                Copy-Item -Path "artifacts/neon-777/AU" -Destination dist-mac/ -Recurse
-              }
-              if (Test-Path "artifacts/neon-777/waves-1") {
-                  Copy-Item -Path "artifacts/neon-777/waves-1" -Destination dist-mac/ -Recurse
+              Copy-Item -Path "artifacts/neon-sid/Standalone/Neon SID.app" -Destination dist-mac/ -Recurse
+              Copy-Item -Path "artifacts/neon-sid/VST3" -Destination dist-mac/ -Recurse
+              if (Test-Path "artifacts/neon-sid/AU") {
+                Copy-Item -Path "artifacts/neon-sid/AU" -Destination dist-mac/ -Recurse
               }
           }
           elseif ("${{ matrix.platform }}" -eq "Android") {
               mkdir dist-android
-              if (Test-Path "artifacts/neon-777/Android") {
-                  Copy-Item -Path "artifacts/neon-777/Android/*.apk" -Destination dist-android/ -ErrorAction SilentlyContinue
-                if (Test-Path "artifacts/neon-777/Android/libs") {
-                  Copy-Item -Path "artifacts/neon-777/Android/libs/*.so" -Destination dist-android/ -ErrorAction SilentlyContinue
+              if (Test-Path "artifacts/neon-sid/Android") {
+                  Copy-Item -Path "artifacts/neon-sid/Android/*.apk" -Destination dist-android/ -ErrorAction SilentlyContinue
+                if (Test-Path "artifacts/neon-sid/Android/libs") {
+                  Copy-Item -Path "artifacts/neon-sid/Android/libs/*.so" -Destination dist-android/ -ErrorAction SilentlyContinue
                 }
               }
-              Compress-Archive -Path dist-android/* -DestinationPath "Neon-777-Android.zip"
+              Compress-Archive -Path dist-android/* -DestinationPath "Neon-SID-Android.zip"
           }
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: Neon-777-${{ matrix.platform }}
+          name: Neon-SID-${{ matrix.platform }}
           if-no-files-found: ignore
           path: |
-            ${{ matrix.platform == 'PC' && 'Neon-777-PC.zip' || '' }}
+            ${{ matrix.platform == 'PC' && 'Neon-SID-PC.zip' || '' }}
             ${{ matrix.platform == 'Mac' && 'dist-mac/' || '' }}
-            ${{ matrix.platform == 'Android' && 'Neon-777-Android.zip' || '' }}
+            ${{ matrix.platform == 'Android' && 'Neon-SID-Android.zip' || '' }}
 
   release:
     name: Create Alpha Release
@@ -161,9 +155,9 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            Neon-777-PC/Neon-777-PC.zip
-            Neon-777-Mac/**/*
-            Neon-777-Android/Neon-777-Android.zip
+            Neon-SID-PC/Neon-SID-PC.zip
+            Neon-SID-Mac/**/*
+            Neon-SID-Android/Neon-SID-Android.zip
           draft: false
           prerelease: true
           generate_release_notes: true

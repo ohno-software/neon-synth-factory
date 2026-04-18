@@ -63,6 +63,9 @@ jobs:
         if: matrix.platform == 'Android'
         shell: bash
         run: |
+          sdk_root="$(dirname "$(dirname "${{ steps.setup-ndk.outputs.ndk-path }}")")"
+          echo "ANDROID_HOME=$sdk_root" >> $GITHUB_ENV
+          echo "ANDROID_SDK_ROOT=$sdk_root" >> $GITHUB_ENV
           echo "ANDROID_NDK_ROOT=${{ steps.setup-ndk.outputs.ndk-path }}" >> $GITHUB_ENV
           echo "ANDROID_NDK_HOME=${{ steps.setup-ndk.outputs.ndk-path }}" >> $GITHUB_ENV
 
@@ -82,6 +85,23 @@ jobs:
             ./build.ps1 -Synth neon-chip -Config Release
           }
 
+      - name: Validate macOS AU (auval)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -e
+          AU_BUNDLE=$(find artifacts/neon-chip/AU -name "*.component" -maxdepth 2 | head -n 1)
+          if [ -z "$AU_BUNDLE" ]; then
+            echo "ERROR: No .component AU bundle was produced."
+            exit 1
+          fi
+          echo "Found AU bundle: $AU_BUNDLE"
+          mkdir -p "$HOME/Library/Audio/Plug-Ins/Components"
+          cp -R "$AU_BUNDLE" "$HOME/Library/Audio/Plug-Ins/Components/"
+          killall -9 AudioComponentRegistrar 2>/dev/null || true
+          auval -a | grep -i "NeCh" || true
+          auval -v aumu NeCh NeAu
+
       - name: Prepare Artifacts
         shell: pwsh
         run: |
@@ -97,11 +117,17 @@ jobs:
               mkdir dist-mac
               Copy-Item -Path "artifacts/neon-chip/Standalone/Neon Chip.app" -Destination dist-mac/ -Recurse
               Copy-Item -Path "artifacts/neon-chip/VST3" -Destination dist-mac/ -Recurse
+              if (Test-Path "artifacts/neon-chip/AU") {
+                Copy-Item -Path "artifacts/neon-chip/AU" -Destination dist-mac/ -Recurse
+              }
           }
           elseif ("${{ matrix.platform }}" -eq "Android") {
               mkdir dist-android
               if (Test-Path "artifacts/neon-chip/Android") {
                   Copy-Item -Path "artifacts/neon-chip/Android/*.apk" -Destination dist-android/ -ErrorAction SilentlyContinue
+                if (Test-Path "artifacts/neon-chip/Android/libs") {
+                  Copy-Item -Path "artifacts/neon-chip/Android/libs/*.so" -Destination dist-android/ -ErrorAction SilentlyContinue
+                }
               }
               Compress-Archive -Path dist-android/* -DestinationPath "Neon-Chip-Android.zip"
           }
@@ -110,6 +136,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Neon-Chip-${{ matrix.platform }}
+          if-no-files-found: ignore
           path: |
             ${{ matrix.platform == 'PC' && 'Neon-Chip-PC.zip' || '' }}
             ${{ matrix.platform == 'Mac' && 'dist-mac/' || '' }}

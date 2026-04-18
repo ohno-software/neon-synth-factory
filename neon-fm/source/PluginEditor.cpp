@@ -65,6 +65,8 @@ namespace neon
         for (auto* m : modules)
             addChildComponent (m);
 
+        addAndMakeVisible (debugLauncher);
+
         setActiveModule (0);
         setSize (940, 840);
         startTimerHz (30);
@@ -120,6 +122,9 @@ namespace neon
         bounds.removeFromBottom ((int) unitH);
 
         selectionPanel.setBounds (getLocalBounds());
+
+        debugLauncher.setBounds (getWidth() - 56, 6, 48, 22);
+        debugLauncher.toFront (false);
 
         for (auto* m : modules)
         {

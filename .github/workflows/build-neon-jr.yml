@@ -63,6 +63,9 @@ jobs:
         if: matrix.platform == 'Android'
         shell: bash
         run: |
+          sdk_root="$(dirname "$(dirname "${{ steps.setup-ndk.outputs.ndk-path }}")")"
+          echo "ANDROID_HOME=$sdk_root" >> $GITHUB_ENV
+          echo "ANDROID_SDK_ROOT=$sdk_root" >> $GITHUB_ENV
           echo "ANDROID_NDK_ROOT=${{ steps.setup-ndk.outputs.ndk-path }}" >> $GITHUB_ENV
           echo "ANDROID_NDK_HOME=${{ steps.setup-ndk.outputs.ndk-path }}" >> $GITHUB_ENV
 
@@ -82,6 +85,23 @@ jobs:
             ./build.ps1 -Synth neon-jr -Config Release
           }
 
+      - name: Validate macOS AU (auval)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -e
+          AU_BUNDLE=$(find artifacts/neon-jr/AU -name "*.component" -maxdepth 2 | head -n 1)
+          if [ -z "$AU_BUNDLE" ]; then
+            echo "ERROR: No .component AU bundle was produced."
+            exit 1
+          fi
+          echo "Found AU bundle: $AU_BUNDLE"
+          mkdir -p "$HOME/Library/Audio/Plug-Ins/Components"
+          cp -R "$AU_BUNDLE" "$HOME/Library/Audio/Plug-Ins/Components/"
+          killall -9 AudioComponentRegistrar 2>/dev/null || true
+          auval -a | grep -i "NeJr" || true
+          auval -v aumu NeJr NeAu
+
       - name: Prepare Artifacts
         shell: pwsh
         run: |
@@ -100,15 +120,21 @@ jobs:
               cp -r "artifacts/neon-jr/Standalone/*.app" dist-mac/
               cp -r artifacts/neon-jr/waves-1 dist-mac/
               cp -r artifacts/neon-jr/VST3 dist-mac/
+              if (Test-Path "artifacts/neon-jr/AU") {
+                Copy-Item -Path "artifacts/neon-jr/AU" -Destination dist-mac/ -Recurse
+              }
           }
           # Android: Package APK and waves
           elseif ("${{ matrix.platform }}" -eq "Android") {
               mkdir dist-android
               # Copy APK from artifacts directory
               if (Test-Path "artifacts/neon-jr/Android") {
-                  cp artifacts/neon-jr/Android/*.apk dist-android/ -ErrorAction SilentlyContinue
+                Copy-Item -Path "artifacts/neon-jr/Android/*.apk" -Destination dist-android/ -ErrorAction SilentlyContinue
+                if (Test-Path "artifacts/neon-jr/Android/libs") {
+                  Copy-Item -Path "artifacts/neon-jr/Android/libs/*.so" -Destination dist-android/ -ErrorAction SilentlyContinue
+                }
                   if (Test-Path "artifacts/neon-jr/Android/waves-1") {
-                      cp -r artifacts/neon-jr/Android/waves-1 dist-android/
+                  Copy-Item -Path "artifacts/neon-jr/Android/waves-1" -Destination dist-android/ -Recurse
                   }
               }
               Compress-Archive -Path dist-android/* -DestinationPath "Neon-Jr-Android.zip"
@@ -118,10 +144,11 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Neon-Jr-${{ matrix.platform }}
+          if-no-files-found: ignore
           path: |
-            Neon-Jr-PC.zip
-            dist-mac/
-            Neon-Jr-Android.zip
+            ${{ matrix.platform == 'PC' && 'Neon-Jr-PC.zip' || '' }}
+            ${{ matrix.platform == 'Mac' && 'dist-mac/' || '' }}
+            ${{ matrix.platform == 'Android' && 'Neon-Jr-Android.zip' || '' }}
 
   release:
     name: Create Alpha Release

@@ -63,6 +63,9 @@ jobs:
         if: matrix.platform == 'Android'
         shell: bash
         run: |
+          sdk_root="$(dirname "$(dirname "${{ steps.setup-ndk.outputs.ndk-path }}")")"
+          echo "ANDROID_HOME=$sdk_root" >> $GITHUB_ENV
+          echo "ANDROID_SDK_ROOT=$sdk_root" >> $GITHUB_ENV
           echo "ANDROID_NDK_ROOT=${{ steps.setup-ndk.outputs.ndk-path }}" >> $GITHUB_ENV
           echo "ANDROID_NDK_HOME=${{ steps.setup-ndk.outputs.ndk-path }}" >> $GITHUB_ENV
 
@@ -81,6 +84,25 @@ jobs:
           } else {
             ./build.ps1 -Synth neon-fm -Config Release
           }
+
+      - name: Validate macOS AU (auval)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -e
+          AU_BUNDLE=$(find artifacts/neon-fm/AU -name "*.component" -maxdepth 2 | head -n 1)
+          if [ -z "$AU_BUNDLE" ]; then
+            echo "ERROR: No .component AU bundle was produced."
+            exit 1
+          fi
+          echo "Found AU bundle: $AU_BUNDLE"
+          # Install into the user AU folder so auval can discover it
+          mkdir -p "$HOME/Library/Audio/Plug-Ins/Components"
+          cp -R "$AU_BUNDLE" "$HOME/Library/Audio/Plug-Ins/Components/"
+          # Refresh AU cache then validate (aumu = Music Device, NeFm/NeAu from CMakeLists)
+          killall -9 AudioComponentRegistrar 2>/dev/null || true
+          auval -a | grep -i "NeFm" || true
+          auval -v aumu NeFm NeAu
 
       - name: Prepare Artifacts
         shell: pwsh
@@ -103,11 +125,17 @@ jobs:
               Copy-Item -Path "artifacts/neon-fm/waves-1" -Destination dist-mac/ -Recurse
             }
               Copy-Item -Path "artifacts/neon-fm/VST3" -Destination dist-mac/ -Recurse
+              if (Test-Path "artifacts/neon-fm/AU") {
+                Copy-Item -Path "artifacts/neon-fm/AU" -Destination dist-mac/ -Recurse
+              }
           }
           elseif ("${{ matrix.platform }}" -eq "Android") {
               mkdir dist-android
               if (Test-Path "artifacts/neon-fm/Android") {
                   Copy-Item -Path "artifacts/neon-fm/Android/*.apk" -Destination dist-android/ -ErrorAction SilentlyContinue
+                if (Test-Path "artifacts/neon-fm/Android/libs") {
+                  Copy-Item -Path "artifacts/neon-fm/Android/libs/*.so" -Destination dist-android/ -ErrorAction SilentlyContinue
+                }
               }
               Compress-Archive -Path dist-android/* -DestinationPath "Neon-FM-Android.zip"
           }

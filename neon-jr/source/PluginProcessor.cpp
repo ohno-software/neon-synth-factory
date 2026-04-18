@@ -102,6 +102,16 @@ namespace neon
     {
         return new NeonJrAudioProcessorEditor (*this);
     }
+
+    void NeonJrAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
+    {
+        PatchManager::getInstance().saveStateToMemory (destData);
+    }
+
+    void NeonJrAudioProcessor::setStateInformation (const void* data, int sizeInBytes)
+    {
+        PatchManager::getInstance().loadStateFromMemory (data, sizeInBytes);
+    }
 } // namespace neon
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()

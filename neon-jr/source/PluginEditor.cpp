@@ -108,6 +108,8 @@ namespace neon
         for (auto* m : modules)
             addChildComponent (m);
 
+        addAndMakeVisible (debugLauncher);
+
         selectionPanel.onModuleChanged = [this] (int index) { setActiveModule (index); };
 
         setActiveModule (15); // Default to LIB
@@ -178,6 +180,9 @@ namespace neon
         
         // Selection panel gets full height of window, positioned to place rows correctly
         selectionPanel.setBounds (0, 0, getWidth(), getHeight());
+
+        debugLauncher.setBounds (getWidth() - 56, 6, 48, 22);
+        debugLauncher.toFront (false);
         
         // The remaining 8/10 is for the active module (5/10 display + 3/10 parameters)
         for (auto* m : modules)

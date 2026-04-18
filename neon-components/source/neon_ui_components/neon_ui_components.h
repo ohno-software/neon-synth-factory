@@ -43,6 +43,7 @@
 #include "widgets/NeonXYPad.h"
 #include "widgets/NeonRibbon.h"
 #include "widgets/NeonDebugPanel.h"
+#include "widgets/NeonDebugLauncher.h"
 
 // Molecules (Compound Components)
 #include "widgets/NeonParameterCard.h"

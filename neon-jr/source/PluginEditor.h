@@ -24,7 +24,7 @@ namespace neon
 
         LookAndFeel lookAndFeel;
         
-        NeonDebugPanel debugPanel;
+        NeonDebugLauncher debugLauncher;
         ModuleSelectionPanel selectionPanel;
         juce::OwnedArray<ModuleBase> modules;
 

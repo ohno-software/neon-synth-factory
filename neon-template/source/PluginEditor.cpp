@@ -28,6 +28,8 @@ namespace neon
 
         addAndMakeVisible (selectionPanel);
 
+        addAndMakeVisible (debugLauncher);
+
         setSize(940, 840);
     }
 
@@ -46,5 +48,7 @@ namespace neon
     {
         auto bounds = getLocalBounds();
         selectionPanel.setBounds(bounds);
+        debugLauncher.setBounds (getWidth() - 56, 6, 48, 22);
+        debugLauncher.toFront (false);
     }
 }
