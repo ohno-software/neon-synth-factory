@@ -1,0 +1,19 @@
+name: Build All Synths
+
+on:
+  push:
+    branches: [ main ]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build-matrix:
+    strategy:
+      matrix:
+        synth: [ neon-777, neon-jr, neon-split, neon-chip, neon-fm, neon-sid ]
+    uses: ./.github/workflows/build-synth.yml
+    with:
+      synth: ${{ matrix.synth }}

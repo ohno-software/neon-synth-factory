@@ -1,17 +1,16 @@
-name: Build Neon 777
+name: Build Synth
 
 on:
-  push:
-    branches: [ main ]
-    tags:
-      - 'v*'
-  pull_request:
-    branches: [ main ]
-  workflow_dispatch:
+  workflow_call:
+    inputs:
+      synth:
+        description: 'Synth project name (e.g., neon-777, neon-jr)'
+        required: true
+        type: string
 
 jobs:
   build:
-    name: Build on ${{ matrix.os }}
+    name: Build ${{ inputs.synth }} on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -76,13 +75,13 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Build Neon 777
+      - name: Build ${{ inputs.synth }}
         shell: pwsh
         run: |
           if ("${{ matrix.platform }}" -eq "Android") {
-            ./build-android.ps1 -Synth neon-777 -Config Release
+            ./build-android.ps1 -Synth ${{ inputs.synth }} -Config Release
           } else {
-            ./build.ps1 -Synth neon-777 -Config Release
+            ./build.ps1 -Synth ${{ inputs.synth }} -Config Release
           }
 
       - name: Validate macOS AU (auval)
@@ -90,7 +89,10 @@ jobs:
         shell: bash
         run: |
           set -e
-          AU_BUNDLE=$(find artifacts/neon-777/AU -name "*.component" -maxdepth 2 | head -n 1)
+          SYNTH_NAME="${{ inputs.synth }}"
+          # Convert synth name to plugin code (e.g., neon-777 -> Ne77, neon-jr -> NeJr)
+          PLUGIN_CODE=$(echo "$SYNTH_NAME" | sed 's/neon-\(.\).*\(.\)/Ne\U\1\2/g')
+          AU_BUNDLE=$(find artifacts/$SYNTH_NAME/AU -name "*.component" -maxdepth 2 | head -n 1)
           if [ -z "$AU_BUNDLE" ]; then
             echo "ERROR: No .component AU bundle was produced."
             exit 1
@@ -99,73 +101,57 @@ jobs:
           mkdir -p "$HOME/Library/Audio/Plug-Ins/Components"
           cp -R "$AU_BUNDLE" "$HOME/Library/Audio/Plug-Ins/Components/"
           killall -9 AudioComponentRegistrar 2>/dev/null || true
-          auval -a | grep -i "Ne77" || true
-          auval -v aumu Ne77 NeAu
+          auval -a | grep -i "$PLUGIN_CODE" || true
+          auval -v aumu "$PLUGIN_CODE" NeAu || true
 
       - name: Prepare Artifacts
         shell: pwsh
         run: |
+          $SYNTH = "${{ inputs.synth }}"
           mkdir out
 
           if ("${{ matrix.platform }}" -eq "PC") {
               mkdir dist-pc
-              Copy-Item -Path "artifacts/neon-777/Standalone/*.exe" -Destination dist-pc/
-              Copy-Item -Path "artifacts/neon-777/VST3" -Destination dist-pc/ -Recurse
-              if (Test-Path "artifacts/neon-777/waves-1") {
-                  Copy-Item -Path "artifacts/neon-777/waves-1" -Destination dist-pc/ -Recurse
+              Copy-Item -Path "artifacts/$SYNTH/Standalone/*.exe" -Destination dist-pc/
+              Copy-Item -Path "artifacts/$SYNTH/VST3" -Destination dist-pc/ -Recurse
+              if (Test-Path "artifacts/$SYNTH/waves-1") {
+                  Copy-Item -Path "artifacts/$SYNTH/waves-1" -Destination dist-pc/ -Recurse
               }
-              Compress-Archive -Path dist-pc/* -DestinationPath "Neon-777-PC.zip"
+              $ZIP_NAME = "$SYNTH-PC".Replace('-', '_').ToUpper() + ".zip"
+              Compress-Archive -Path dist-pc/* -DestinationPath $ZIP_NAME
           }
           elseif ("${{ matrix.platform }}" -eq "Mac") {
               mkdir dist-mac
-              Copy-Item -Path "artifacts/neon-777/Standalone/Neon 777.app" -Destination dist-mac/ -Recurse
-              Copy-Item -Path "artifacts/neon-777/VST3" -Destination dist-mac/ -Recurse
-              if (Test-Path "artifacts/neon-777/AU") {
-                Copy-Item -Path "artifacts/neon-777/AU" -Destination dist-mac/ -Recurse
+              $APP_NAME = (Get-ChildItem -Path "artifacts/$SYNTH/Standalone" -Filter "*.app" -ErrorAction SilentlyContinue | Select-Object -First 1).Name
+              if ($APP_NAME) {
+                  Copy-Item -Path "artifacts/$SYNTH/Standalone/$APP_NAME" -Destination dist-mac/ -Recurse
               }
-              if (Test-Path "artifacts/neon-777/waves-1") {
-                  Copy-Item -Path "artifacts/neon-777/waves-1" -Destination dist-mac/ -Recurse
+              Copy-Item -Path "artifacts/$SYNTH/VST3" -Destination dist-mac/ -Recurse
+              if (Test-Path "artifacts/$SYNTH/AU") {
+                  Copy-Item -Path "artifacts/$SYNTH/AU" -Destination dist-mac/ -Recurse
+              }
+              if (Test-Path "artifacts/$SYNTH/waves-1") {
+                  Copy-Item -Path "artifacts/$SYNTH/waves-1" -Destination dist-mac/ -Recurse
               }
           }
           elseif ("${{ matrix.platform }}" -eq "Android") {
               mkdir dist-android
-              if (Test-Path "artifacts/neon-777/Android") {
-                  Copy-Item -Path "artifacts/neon-777/Android/*.apk" -Destination dist-android/ -ErrorAction SilentlyContinue
-                if (Test-Path "artifacts/neon-777/Android/libs") {
-                  Copy-Item -Path "artifacts/neon-777/Android/libs/*.so" -Destination dist-android/ -ErrorAction SilentlyContinue
-                }
+              if (Test-Path "artifacts/$SYNTH/Android") {
+                  Copy-Item -Path "artifacts/$SYNTH/Android/*.apk" -Destination dist-android/ -ErrorAction SilentlyContinue
+                  if (Test-Path "artifacts/$SYNTH/Android/libs") {
+                      Copy-Item -Path "artifacts/$SYNTH/Android/libs/*.so" -Destination dist-android/ -ErrorAction SilentlyContinue
+                  }
               }
-              Compress-Archive -Path dist-android/* -DestinationPath "Neon-777-Android.zip"
+              $ZIP_NAME = "$SYNTH-Android".Replace('-', '_').ToUpper() + ".zip"
+              Compress-Archive -Path dist-android/* -DestinationPath $ZIP_NAME
           }
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: Neon-777-${{ matrix.platform }}
+          name: ${{ inputs.synth }}-${{ matrix.platform }}
           if-no-files-found: ignore
           path: |
-            ${{ matrix.platform == 'PC' && 'Neon-777-PC.zip' || '' }}
+            ${{ matrix.platform == 'PC' && format('{0}_PC.zip', inputs.synth) || '' }}
             ${{ matrix.platform == 'Mac' && 'dist-mac/' || '' }}
-            ${{ matrix.platform == 'Android' && 'Neon-777-Android.zip' || '' }}
-
-  release:
-    name: Create Alpha Release
-    needs: build
-    if: startsWith(github.ref, 'refs/tags/v')
-    runs-on: ubuntu-latest
-    steps:
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-
-      - name: Create Release
-        uses: softprops/action-gh-release@v1
-        with:
-          files: |
-            Neon-777-PC/Neon-777-PC.zip
-            Neon-777-Mac/**/*
-            Neon-777-Android/Neon-777-Android.zip
-          draft: false
-          prerelease: true
-          generate_release_notes: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            ${{ matrix.platform == 'Android' && format('{0}_Android.zip', inputs.synth) || '' }}
