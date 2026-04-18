@@ -1,0 +1,47 @@
+<svg viewBox="0 0 400 500" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <polygon points="0 0, 10 3, 0 6" fill="#4a9fff"/>
+    </marker>
+  </defs>
+  
+  <!-- Title -->
+  <text x="200" y="30" font-size="18" font-weight="bold" text-anchor="middle" fill="#4a9fff">Complex Fork</text>
+  
+  <!-- Operator 1 -->
+  <rect x="80" y="100" width="100" height="60" rx="8" fill="#4a90e2" stroke="#4a90e2" stroke-width="2"/>
+  <text x="130" y="135" font-size="28" font-weight="bold" text-anchor="middle" fill="white">1</text>
+  
+  <!-- Arrows from 1 -->
+  <line x1="180" y1="90" x2="230" y2="50" stroke="#4a9fff" stroke-width="2" marker-end="url(#arrowhead)"/>
+  <line x1="180" y1="160" x2="230" y2="170" stroke="#4a9fff" stroke-width="2" marker-end="url(#arrowhead)"/>
+  
+  <!-- Operator 2 -->
+  <rect x="230" y="20" width="100" height="60" rx="8" fill="#4a90e2" stroke="#4a90e2" stroke-width="2"/>
+  <text x="280" y="55" font-size="28" font-weight="bold" text-anchor="middle" fill="white">2</text>
+  
+  <!-- Operator 3 -->
+  <rect x="230" y="140" width="100" height="60" rx="8" fill="#4a90e2" stroke="#4a90e2" stroke-width="2"/>
+  <text x="280" y="175" font-size="28" font-weight="bold" text-anchor="middle" fill="white">3</text>
+  
+  <!-- Arrows to 4 -->
+  <line x1="280" y1="80" x2="280" y2="140" stroke="#4a9fff" stroke-width="2" marker-end="url(#arrowhead)"/>
+  <line x1="280" y1="200" x2="280" y2="240" stroke="#4a9fff" stroke-width="2" marker-end="url(#arrowhead)"/>
+  
+  <!-- Operator 4 (Carrier) -->
+  <rect x="230" y="240" width="100" height="80" rx="8" fill="#50c878" stroke="#50c878" stroke-width="2"/>
+  <text x="280" y="290" font-size="28" font-weight="bold" text-anchor="middle" fill="white">4</text>
+  
+  <!-- Arrow to OUT -->
+  <line x1="280" y1="320" x2="280" y2="360" stroke="#50c878" stroke-width="2" marker-end="url(#arrowhead)"/>
+  
+  <!-- OUT label -->
+  <text x="280" y="390" font-size="14" text-anchor="middle" fill="#888">OUT</text>
+  
+  <!-- Legend -->
+  <rect x="20" y="450" width="12" height="12" rx="2" fill="#4a90e2"/>
+  <text x="38" y="460" font-size="12" fill="#666">Modulator</text>
+  
+  <rect x="200" y="450" width="12" height="12" rx="2" fill="#50c878"/>
+  <text x="218" y="460" font-size="12" fill="#666">Carrier</text>
+</svg>

@@ -1,0 +1,44 @@
+<svg viewBox="0 0 400 500" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <polygon points="0 0, 10 3, 0 6" fill="#4a9fff"/>
+    </marker>
+  </defs>
+  
+  <!-- Title -->
+  <text x="200" y="30" font-size="18" font-weight="bold" text-anchor="middle" fill="#4a9fff">Triple Modulator</text>
+  
+  <!-- Operator 1 -->
+  <rect x="80" y="70" width="100" height="60" rx="8" fill="#4a90e2" stroke="#4a90e2" stroke-width="2"/>
+  <text x="130" y="105" font-size="28" font-weight="bold" text-anchor="middle" fill="white">1</text>
+  
+  <!-- Operator 2 -->
+  <rect x="80" y="170" width="100" height="60" rx="8" fill="#4a90e2" stroke="#4a90e2" stroke-width="2"/>
+  <text x="130" y="205" font-size="28" font-weight="bold" text-anchor="middle" fill="white">2</text>
+  
+  <!-- Operator 3 -->
+  <rect x="80" y="270" width="100" height="60" rx="8" fill="#4a90e2" stroke="#4a90e2" stroke-width="2"/>
+  <text x="130" y="305" font-size="28" font-weight="bold" text-anchor="middle" fill="white">3</text>
+  
+  <!-- Arrows to 4 -->
+  <line x1="180" y1="100" x2="220" y2="180" stroke="#4a9fff" stroke-width="2" marker-end="url(#arrowhead)"/>
+  <line x1="180" y1="200" x2="240" y2="200" stroke="#4a9fff" stroke-width="2" marker-end="url(#arrowhead)"/>
+  <line x1="180" y1="300" x2="220" y2="220" stroke="#4a9fff" stroke-width="2" marker-end="url(#arrowhead)"/>
+  
+  <!-- Operator 4 (Carrier) -->
+  <rect x="240" y="160" width="100" height="80" rx="8" fill="#50c878" stroke="#50c878" stroke-width="2"/>
+  <text x="290" y="205" font-size="28" font-weight="bold" text-anchor="middle" fill="white">4</text>
+  
+  <!-- Arrow to OUT -->
+  <line x1="290" y1="240" x2="290" y2="280" stroke="#50c878" stroke-width="2" marker-end="url(#arrowhead)"/>
+  
+  <!-- OUT label -->
+  <text x="290" y="310" font-size="14" text-anchor="middle" fill="#888">OUT</text>
+  
+  <!-- Legend -->
+  <rect x="20" y="450" width="12" height="12" rx="2" fill="#4a90e2"/>
+  <text x="38" y="460" font-size="12" fill="#666">Modulator</text>
+  
+  <rect x="200" y="450" width="12" height="12" rx="2" fill="#50c878"/>
+  <text x="218" y="460" font-size="12" fill="#666">Carrier</text>
+</svg>
