@@ -27,8 +27,19 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Fetch JUCE
+      - name: Ensure JUCE Available
+        shell: pwsh
         run: |
+          if (Test-Path "third-party/JUCE/CMakeLists.txt") {
+            Write-Host "Using vendored JUCE from third-party/JUCE"
+            exit 0
+          }
+
+          if (Test-Path "JUCE/CMakeLists.txt") {
+            Write-Host "Using existing JUCE checkout from JUCE/"
+            exit 0
+          }
+
           git clone --depth 1 https://github.com/juce-framework/JUCE.git JUCE
 
       - name: Setup MSVC (Windows)

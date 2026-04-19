@@ -86,7 +86,25 @@ function Test-JavaInstalled {
     }
 }
 
+function Resolve-JuceRoot {
+    param([string]$WorkspaceRoot)
+
+    $juceCandidates = @(
+        (Join-Path $WorkspaceRoot "JUCE"),
+        (Join-Path $WorkspaceRoot "third-party/JUCE")
+    )
+
+    foreach ($candidate in $juceCandidates) {
+        if (Test-Path (Join-Path $candidate "CMakeLists.txt")) {
+            return $candidate
+        }
+    }
+
+    Write-Error "JUCE not found. Expected one of: $($juceCandidates -join ', ')"
+}
+
 $RootDir = $PSScriptRoot
+$JuceRoot = Resolve-JuceRoot -WorkspaceRoot $RootDir
 $DefaultSynths = @(
     "neon-777",
     "neon-chip",
@@ -159,6 +177,7 @@ if (-not (Test-Path $AndroidNdkPath)) {
 }
 
 Write-Host "Using Android NDK: $AndroidNdkPath" -ForegroundColor Green
+Write-Host "Using JUCE: $JuceRoot" -ForegroundColor Green
 
 $SynthDir = Join-Path $RootDir $Synth
 $BuildDir = Join-Path $RootDir "build\$Synth-android"
@@ -227,8 +246,8 @@ if (-not $AndroidBuildDir) {
 # 4. Build installable APK from prebuilt JUCE standalone library
 Write-Host "--- Packaging APK ---" -ForegroundColor Cyan
 
-$JuceModulesDir = Join-Path $RootDir "third-party/JUCE/modules"
-$ApkTemplateDir = Join-Path $RootDir "third-party/JUCE/extras/AudioPluginHost/Builds/Android"
+$JuceModulesDir = Join-Path $JuceRoot "modules"
+$ApkTemplateDir = Join-Path $JuceRoot "extras/AudioPluginHost/Builds/Android"
 $ApkProjectDir = Join-Path $BuildDir "apk-project"
 
 if (-not (Test-Path $ApkTemplateDir)) {
@@ -257,6 +276,8 @@ if (-not (Test-Path $ApkTemplateDir)) {
     $androidManifestPath = Join-Path $ApkProjectDir "app/src/main/AndroidManifest.xml"
     $gradleAppPath = Join-Path $ApkProjectDir "app/build.gradle"
     $gradleSettingsPath = Join-Path $ApkProjectDir "settings.gradle"
+    $GradleAppDir = Join-Path $ApkProjectDir "app"
+    $JuceModulesRelative = [System.IO.Path]::GetRelativePath($GradleAppDir, $JuceModulesDir) -replace "\\", "/"
 
     $ApplicationId = "com.neonaudio." + (($Synth -replace "[^a-zA-Z0-9]", "").ToLower())
     $ProjectDisplayName = if ($Synth -eq "neon-fm") { "Neon FM" } else { ($Synth -replace "-", " ") }
@@ -351,9 +372,9 @@ android {
 
     sourceSets {
         main.java.srcDirs +=
-            ["../../../../third-party/JUCE/modules/juce_core/native/javacore/init",
-             "../../../../third-party/JUCE/modules/juce_core/native/javacore/app",
-             "../../../../third-party/JUCE/modules/juce_gui_basics/native/javaopt/app"]
+            ["$JuceModulesRelative/juce_core/native/javacore/init",
+             "$JuceModulesRelative/juce_core/native/javacore/app",
+             "$JuceModulesRelative/juce_gui_basics/native/javaopt/app"]
 
         main.res.srcDirs += []
         main.jniLibs.srcDirs = ["src/main/jniLibs"]
